@@ -1,0 +1,3 @@
+include *.txt *.ini *.cfg
+recursive-include nive_datastore *
+global-exclude *.pyc 

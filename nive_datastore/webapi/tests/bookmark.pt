@@ -1,0 +1,4 @@
+${view}
+${request}
+${item}
+${item.GetObjs()}
