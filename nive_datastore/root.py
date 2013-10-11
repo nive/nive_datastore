@@ -1,8 +1,7 @@
 # Copyright 2012, 2013 Arndt Droullier, Nive GmbH. All rights reserved.
 # Released under GPL3. See license.txt
 
-
-__doc__ = """
+"""
 Root
 ----
 The *root* is the entry point of the data storage. All contained items are stored 
@@ -12,7 +11,7 @@ The system supports multiple roots with unique urls to access items.
 Also this object provides search functions and sql query wrappers.
 """
 
-from nive.i18n import _
+from nive_datastore.i18n import _
 from nive.components.objects.base import RootBase
 from nive.definitions import RootConf
 from nive.definitions import AllTypesAllowed

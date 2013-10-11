@@ -2,7 +2,7 @@
 # Copyright 2012, 2013 Arndt Droullier, Nive GmbH. All rights reserved.
 # Released under GPL3. See license.txt
 
-__doc__ = """
+"""
 Nive Datastore Application configuration (sqlite example) and usage
 -------------------------------------------------------------------
 The `Nive DataStore` is a highlevel storage with a focus on build in 
@@ -103,7 +103,7 @@ database fields used for all collections use `nive.definitions.AppConf.meta`.
 """
 import copy
 
-from nive.i18n import _
+from nive_datastore.i18n import _
 from nive.definitions import implements, Interface
 from nive.definitions import AppConf, FieldConf, GroupConf
 from nive.definitions import SystemFlds, UserFlds

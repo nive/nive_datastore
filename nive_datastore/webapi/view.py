@@ -5,12 +5,12 @@ import json
 from pyramid.httpexceptions import HTTPForbidden
 from pyramid.security import has_permission
 
+from nive_datastore.i18n import _
 from nive.definitions import ViewModuleConf, ViewConf, Conf
 from nive.definitions import IObject
 from nive.workflow import WorkflowNotAllowed
 from nive.views import BaseView
 from nive.forms import Form, ObjectForm
-from nive_datastore.i18n import _
 
 
 # view module definition ------------------------------------------------------------------
