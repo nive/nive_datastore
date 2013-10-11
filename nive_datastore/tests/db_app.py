@@ -23,8 +23,8 @@ collection1 = ObjectConf(
         FieldConf(id="comment",  datatype="text", size=50000, default=u"",  name=u"Comment"),
     ),
     forms = {
-        "newItem": {"fields": ("link", "share", "comment") }, 
-        "setItem": {"fields": ("link", "share", "comment") }
+        "newItem": {"fields": ("link", "share", "comment"), "ajax":True, "newItem": True}, 
+        "setItem": {"fields": ("link", "share", "comment"), "ajax":True}
     },
     render = ("id", "link", "comment", "pool_changedby", "pool_change"),
     template = "nive_datastore.webapi.tests:bookmark.pt"
@@ -41,7 +41,7 @@ collection2 = ObjectConf(
         FieldConf(id="something", datatype="text",   size=50000, default=u"",  name=u"Some text"),
     ),
     forms = {
-        "newItem": {"fields": ("url", "number", "something") }, 
+        "newItem": {"fields": ("url", "number", "something"), "newItem": True }, 
         "setItem": {"fields": ("url", "number", "something") }
     }
 )
@@ -54,12 +54,12 @@ dbconf = DatabaseConf(
 )
 appconf = AppConf("nive_datastore.app",
     profiles={"bookmarks":  
-                  {"type": "bookmark", 
+                  {"pool_type": "bookmark", 
                    "container": False,
                    "fields": ["id", "link", "comment", "pool_changedby"],
                    "parameter": {}},
               "tracks":  
-                  {"type": "track", 
+                  {"pool_type": "track", 
                    "container": True,
                    "fields": ["id", "link", "comment", "pool_changedby"],
                    "parameter": {}},

@@ -3,7 +3,7 @@
 import time
 import unittest
 
-from nive.definitions import Conf
+from nive.definitions import Conf, ConfigurationError
 from nive.security import User
 from nive_datastore.tests.db_app import *
 from nive_datastore.tests.test_app import create_bookmark, create_track
@@ -88,19 +88,19 @@ class tWebapi(unittest.TestCase):
 
         # add success
         # single item
-        self.request.POST = {"type": "bookmark", "link": u"the link", "comment": u"some text"}
+        self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text"}
         result = view.newItem()
         self.assert_(len(result["result"])==1)
         self.root.Delete(result["result"][0], user=user)
         # single item list
-        self.request.POST = {"items": json.dumps([{"type": "bookmark", "link": u"the link", "comment": u"some text"}])}
+        self.request.POST = {"items": json.dumps([{"pool_type": "bookmark", "link": u"the link", "comment": u"some text"}])}
         result = view.newItem()
         self.assert_(len(result["result"])==1)
         self.root.Delete(result["result"][0], user=user)
         # multiple items list
-        self.request.POST = {"items": json.dumps([{"type": "bookmark", "link": u"the link 1", "comment": u"some text"},
-                                                  {"type": "bookmark", "link": u"the link 2", "comment": u"some text"},
-                                                  {"type": "bookmark", "link": u"the link 3", "comment": u"some text"}])}
+        self.request.POST = {"items": json.dumps([{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
+                                                  {"pool_type": "bookmark", "link": u"the link 2", "comment": u"some text"},
+                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}])}
         result = view.newItem()
         self.assert_(len(result["result"])==3)
         self.root.Delete(result["result"][0], user=user)
@@ -109,36 +109,36 @@ class tWebapi(unittest.TestCase):
 
         # add failure
         # no type
-        self.request.POST = {"type": "nonono", "link": u"the link", "comment": u"some text"}
+        self.request.POST = {"pool_type": "nonono", "link": u"the link", "comment": u"some text"}
         result = view.newItem()
         self.assert_(len(result["result"])==0)
         self.request.POST = {"link": u"the link", "comment": u"some text"}
         result = view.newItem()
         self.assert_(len(result["result"])==0)
         # validatio error
-        self.request.POST = {"type": "track", "number": u"the link", "something": u"some text"}
+        self.request.POST = {"pool_type": "track", "number": u"the link", "something": u"some text"}
         result = view.newItem()
         self.assert_(len(result["result"])==0)
         # single item list
-        self.request.POST = {"items": json.dumps([{"type": "nonono", "link": u"the link", "comment": u"some text"}])}
+        self.request.POST = {"items": json.dumps([{"pool_type": "nonono", "link": u"the link", "comment": u"some text"}])}
         result = view.newItem()
         self.assert_(len(result["result"])==0)
         self.request.POST = {"items": json.dumps([{"link": u"the link", "comment": u"some text"}])}
         result = view.newItem()
         self.assert_(len(result["result"])==0)
         # multiple items list
-        self.request.POST = {"items": json.dumps([{"type": "bookmark", "link": u"the link 1", "comment": u"some text"},
+        self.request.POST = {"items": json.dumps([{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
                                                   {"link": u"the link 2", "comment": u"some text"},
-                                                  {"type": "bookmark", "link": u"the link 3", "comment": u"some text"}])}
+                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}])}
         result = view.newItem()
         self.assert_(len(result["result"])==0)
         
         # to many
         self.app.configuration.unlock()
         self.app.configuration.maxStoreItems = 2
-        self.request.POST = {"items": json.dumps([{"type": "bookmark", "link": u"the link 1", "comment": u"some text"},
+        self.request.POST = {"items": json.dumps([{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
                                                   {"link": u"the link 2", "comment": u"some text"},
-                                                  {"type": "bookmark", "link": u"the link 3", "comment": u"some text"}])}
+                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}])}
         result = view.newItem()
         self.app.configuration.maxStoreItems = 20
         self.app.configuration.lock()
@@ -378,7 +378,7 @@ class tWebapi(unittest.TestCase):
         self.assert_(result["start"]==2)
         self.assert_(len(result["items"])==2)
 
-        self.request.POST = {"type": "track"}
+        self.request.POST = {"pool_type": "track"}
         result = view.listItems()
         self.assert_(len(result["items"])==2)
 
@@ -439,7 +439,7 @@ class tWebapi(unittest.TestCase):
         self.assert_(len(result["items"])==0)
 
         view = APIv1(o1, self.request)
-        self.request.POST = {"type": "track"}
+        self.request.POST = {"pool_type": "track"}
         result = view.listItems()
         self.assert_(len(result["items"])==2)
 
@@ -674,4 +674,132 @@ class tWebapi(unittest.TestCase):
         view = APIv1(o1, self.request)
         data = view.renderTmpl()
         self.assert_(data)
+
+
+    def test_newform(self):
+        user = User(u"test")
+        user.groups.append("group:manager")
+        r = self.root
         
+        view = APIv1(r, self.request)
+
+        self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text"}
+        result = view.newItemForm()
+        self.assert_(result["result"])
+
+        objs=len(r.GetObjsList(fields=["id"]))
+        self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "create$": "1"}
+        result = view.newItemForm()
+        self.assert_(result["result"])
+        self.remove.append(result["result"])
+        self.assert_(objs+1==len(r.GetObjsList(fields=["id"])))
+
+
+    def test_newformfailures(self):
+        user = User(u"test")
+        user.groups.append("group:manager")
+        r = self.root
+        
+        view = APIv1(r, self.request)
+
+        # no type
+        self.request.POST = {"link": u"the link", "comment": u"some text"}
+        result = view.newItemForm()
+        self.assertFalse(result["result"])
+
+        objs=len(r.GetObjsList(fields=["id"]))
+        self.request.POST = {"link": u"the link", "comment": u"some text", "create$": "1"}
+        result = view.newItemForm()
+        self.assertFalse(result["result"])
+        self.assert_(objs==len(r.GetObjsList(fields=["id"])))
+        
+        # wrong subset
+        self.request.POST = {"subset": "unknown!", "pool_type": "bookmark", "link": u"the link", "comment": u"some text"}
+        self.assertRaises(ConfigurationError, view.newItemForm)
+
+        # wrong action
+        objs=len(r.GetObjsList(fields=["id"]))
+        self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "unknown$": "1"}
+        result = view.newItemForm()
+        self.assert_(result["result"])
+        self.remove.append(result["result"])
+        self.assert_(objs==len(r.GetObjsList(fields=["id"])))
+        
+        
+    def test_setform(self):
+        user = User(u"test")
+        user.groups.append("group:manager")
+        r = self.root
+        o1 = create_bookmark(r, user)
+        self.remove.append(o1.id)
+        
+        view = APIv1(o1, self.request)
+
+        self.request.POST = {}
+        result = view.setItemForm()
+        self.assert_(result["result"])
+
+        objs=len(r.GetObjsList(fields=["id"]))
+        self.request.POST = {"link": u"the new link", "comment": u"some new text", "create$": "1"}
+        result = view.setItemForm()
+        self.assert_(result["result"])
+        self.remove.append(result["result"])
+        self.assert_(objs==len(r.GetObjsList(fields=["id"])))
+
+
+    def test_newformfailures(self):
+        user = User(u"test")
+        user.groups.append("group:manager")
+        r = self.root
+        o1 = create_bookmark(r, user)
+        self.remove.append(o1.id)
+        
+        view = APIv1(o1, self.request)
+
+        # wrong subset
+        self.request.POST = {"subset": "unknown!", "pool_type": "bookmark", "link": u"the link", "comment": u"some text"}
+        self.assertRaises(ConfigurationError, view.setItemForm)
+
+        # wrong action
+        objs=len(r.GetObjsList(fields=["id"]))
+        self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "unknown$": "1"}
+        result = view.setItemForm()
+        self.assert_(result["result"])
+        self.remove.append(result["result"])
+        self.assert_(objs==len(r.GetObjsList(fields=["id"])))
+        
+        
+    def test_noaction(self):
+        user = User(u"test")
+        user.groups.append("group:manager")
+        r = self.root
+        o1 = create_bookmark(r, user)
+        self.remove.append(o1.id)
+        
+        view = APIv1(o1, self.request)
+
+        self.request.POST = {"action": "unknown!"}
+        result = view.action()
+        self.assertFalse(result["result"])
+
+        # test returns true if no workflow loaded
+        self.request.POST = {"action": "unknown!", "test":"true"}
+        result = view.action()
+        self.assert_(result["result"])
+
+        self.request.POST = {"action": "unknown!", "transition":"oooooo"}
+        result = view.action()
+        self.assertFalse(result["result"])
+
+
+    def test_nostate(self):
+        user = User(u"test")
+        user.groups.append("group:manager")
+        r = self.root
+        o1 = create_bookmark(r, user)
+        self.remove.append(o1.id)
+        
+        view = APIv1(o1, self.request)
+
+        result = view.state()
+        self.assertFalse(result["result"])

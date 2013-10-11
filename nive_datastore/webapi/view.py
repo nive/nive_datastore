@@ -5,9 +5,11 @@ import json
 from pyramid.httpexceptions import HTTPForbidden
 from pyramid.security import has_permission
 
+from nive.definitions import ViewModuleConf, ViewConf, Conf
+from nive.definitions import IObject
+from nive.workflow import WorkflowNotAllowed
 from nive.views import BaseView
-from nive.definitions import ViewModuleConf, ViewConf
-from nive.forms import Form
+from nive.forms import Form, ObjectForm
 from nive_datastore.i18n import _
 
 
@@ -37,7 +39,8 @@ configuration.views = (
     ViewConf(name="toJson",  attr="toJson",  permission="tojson",  renderer="json"),
     ViewConf(name="render",  attr="render",  permission="render"),
     # forms
-    ViewConf(name="form",    attr="form",    permission="webform", renderer="json"),
+    ViewConf(name="newItemForm",    attr="newItemForm",    permission="addform", renderer="json"),
+    ViewConf(name="setItemForm",    attr="setItemForm",    permission="updateform", renderer="json"),
     # workflow
     ViewConf(name="action", attr="action",   permission="action",  renderer="json"),
     ViewConf(name="state",  attr="state",    permission="state",   renderer="json"),
@@ -160,6 +163,7 @@ class APIv1(BaseView):
         
         Request parameter:
         
+        - pool_type: the new type to be created. Must be set for each item.
         - <fields>: A single item can be passed as form values.
         - items (optional): One or multiple items to be stored. Multiple items have to be passed as 
           array. Maximum number of 20 items allowed.
@@ -173,7 +177,7 @@ class APIv1(BaseView):
         items = self.GetFormValue("items")
         if not items:
             values = self.GetFormValues()
-            typename = values.get("type")
+            typename = values.get("pool_type")
             if not typename:
                 response.status = u"400 No type given"
                 return {"error": "No type given", "result":[]}
@@ -203,7 +207,7 @@ class APIv1(BaseView):
         validated = []
         cnt = 1
         for values in items:
-            typename = values.get("type")
+            typename = values.get("pool_type")
             if not typename:
                 response.status = u"400 No type given"
                 return {"error": "No type given: Item "+str(cnt), "result":[]}
@@ -367,7 +371,7 @@ class APIv1(BaseView):
         user = self.User()
                 
         values = self.GetFormValues()
-        type = values.get("type")
+        type = values.get("pool_type")
 
         try:
             start = ExtractJSValue(values, u"start", 0, "int")
@@ -412,7 +416,7 @@ class APIv1(BaseView):
         configuration as (see `nive.search` for a full list of keyword options and 
         usage) ::
         
-          {"profilename": {"type": "", "container": False,
+          {"profilename": {"pool_type": "", "container": False,
                            "fields": [], "parameter": {}, "operators": {}}}
           
         If `type` is not empty this function uses `nive.search.SearchType`, if empty `nive.search.Search`.
@@ -467,7 +471,7 @@ class APIv1(BaseView):
             response.status = u"400 Invalid parameter"
             return {"error": "Invalid parameter: size", "items":[]}
         
-        type = profile.get("type")
+        type = profile.get("pool_type")
 
         order = values.get("order",None)
         if order == u"<":
@@ -492,7 +496,7 @@ class APIv1(BaseView):
         fields = profile.get("fields")
         kws = {}
         for key,value in profile.items():
-            if key in ("parameter", "operators", "fields", "container"):
+            if key in ("pool_type", "parameter", "operators", "fields", "container"):
                 continue
             kws[key] = value
         
@@ -624,18 +628,229 @@ class APIv1(BaseView):
         return self.DefaultTemplateRenderer(values, template)
     
 
-    def form(self):
-        """
-        """
-        subset = self.GetFormValue("subset")
-        item = self.context
+    # form rendering ------------------------------------------------------------
 
+    def newItemForm(self):
+        """
+        Renders and executes a web form based on the items configuration values. 
+        Form form setup `pool_type` and `subset` are required. If subset is not 
+        given it defaults to `newItem`. `subset` is the form identifier used in
+        the items configuration as `form`. 
+        
+        For example ::
+
+            collection1 = ObjectConf(
+                id = "bookmark",
+                name = u"Bookmarks",
+                dbparam = "bookmarks",
+                subtypes="*",
+                data = (
+                    FieldConf(id="link",     datatype="url",  size=500,   default=u"",  name=u"Link url"),
+                    FieldConf(id="share",    datatype="bool", size=2,     default=False,name=u"Share link"),
+                    FieldConf(id="comment",  datatype="text", size=50000, default=u"",  name=u"Comment"),
+                ),
+                forms = {
+                    "newItem": {"fields": ("link", "share", "comment"), "ajax": True}, 
+                    "setItem": {"fields": ("link", "share", "comment"), "ajax": True}
+                },
+                render = ("id", "link", "comment", "pool_changedby", "pool_change"),
+                template = "nive_datastore.webapi.tests:bookmark.pt"
+            )
+
+        defines the newItem form subset as ::
+        
+            {"fields": ("link", "share", "comment"), "ajax": True}        
+        
+        The function returns json including rendered form html and result state: 
+
+        - result: true or false
+        - content: rendered form html
+        - head: required html head includes like js and css files
+        """
+        typename = self.GetFormValue("pool_type")
+        if not typename:
+            return {u"result": False, u"content": u"", u"head": u"", u"message": u"No type given"}
+        typeconf = self.context.app.GetObjectConf(typename)
+        subset = self.GetFormValue("subset") or "newItem"
+        if not subset:
+            return {u"result": False, u"content": u"", u"head": u"", u"message": u"No subset given"}
+        form = ItemForm(view=self, loadFromType=typeconf)
+        form.subsets = typeconf.forms
+        subsetdef = form.subsets.get(subset)
+        if subsetdef and not subsetdef.get("actions"):
+            # add default new item actions
+            subsetdef = subsetdef.copy()
+            subsetdef.update(form.defaultNewItemAction)
+            form.subsets[subset] = subsetdef
+
+        form.Setup(subset=subset, addTypeField=True)
+        # process and render the form.
+        form.use_ajax = True
+        result, data, action = form.Process(pool_type=typename)
+        head = form.HTMLHead()
+        if IObject.providedBy(result):
+            result = result.id
+        return {u"result": result, u"content": data, u"head": head}
+        
+
+    def setItemForm(self):
+        """
+        Renders and executes a web form based on the items configuration values. 
+        Form setup requires `subset` passed in the request. If subset is not 
+        given it defaults to `setItem`. `subset` is the form identifier used in
+        the items configuration as `form`. 
+        
+        For example ::
+
+            collection1 = ObjectConf(
+                id = "bookmark",
+                name = u"Bookmarks",
+                dbparam = "bookmarks",
+                subtypes="*",
+                data = (
+                    FieldConf(id="link",     datatype="url",  size=500,   default=u"",  name=u"Link url"),
+                    FieldConf(id="share",    datatype="bool", size=2,     default=False,name=u"Share link"),
+                    FieldConf(id="comment",  datatype="text", size=50000, default=u"",  name=u"Comment"),
+                ),
+                forms = {
+                    "newItem": {"fields": ("link", "share", "comment"), "ajax": True}, 
+                    "setItem": {"fields": ("link", "share", "comment"), "ajax": True}
+                },
+                render = ("id", "link", "comment", "pool_changedby", "pool_change"),
+                template = "nive_datastore.webapi.tests:bookmark.pt"
+            )
+
+        defines the setItem form subset as ::
+        
+            {"fields": ("link", "share", "comment"), "ajax": True}        
+        
+        The function returns json including rendered form html and result state: 
+
+        - result: true or false
+        - content: rendered form html
+        - head: required html head includes like js and css files
+        """
+        typeconf = self.context.configuration
+        subset = self.GetFormValue("subset") or "newItem"
+        if not subset:
+            return {u"result": False, u"content": u"", u"head": u"", u"message": u"No subset given"}
+        form = ItemForm(view=self, loadFromType=typeconf)
+        form.subsets = typeconf.forms
+        subsetdef = form.subsets.get(subset)
+        if subsetdef and not subsetdef.get("actions"):
+            # add default new item actions
+            subsetdef = subsetdef.copy()
+            subsetdef.update(form.defaultNewItemAction)
+            form.subsets[subset] = subsetdef
+
+        form.Setup(subset=subset, addTypeField=True)
+        # process and render the form.
+        form.use_ajax = True
+        result, data, action = form.Process(pool_type=typeconf.id)
+        head = form.HTMLHead()
+        if IObject.providedBy(result):
+            result = result.id
+        return {u"result": result, u"content": data, u"head": head}
+
+
+    # workflow functions ------------------------------------------------------------
 
     def action(self):
         """
+        Trigger a workflow action based on the contexts current state.
+        
+        Parameters: 
+        - action: action name to be triggered
+        - transition (optional): transition if multiple match action 
+        - test (optional): if 'true' the action is not triggered but only
+          tested if the current user is allowed to run the action in
+          the current context.
+          
+        returns the action result and new state information
+        
+        {"result":true/false, "messages": [], "state": {}}
         """
+        action = self.GetFormValue("action") or "newItem"
+        if not action:
+            return {"result": False, "messages": ["No action given"]}
+        transition = self.GetFormValue("transition")
+        test = self.GetFormValue("test")=="true"
+        
+        result = {"result": False, "messages": None}
+        if test:
+            result["result"] = self.context.WfAllow(action, self.user, transition)
+            if result["result"]:
+                result["messages"] = [u"Allowed"]
+            else:
+                result["messages"] = [u"Not allowed"]
+        else:
+            try:
+                result["result"] = self.context.WfAction(action, self.user, transition)
+                result["messages"] = [u"OK"]
+                result["state"] = self.state()
+            except WorkflowNotAllowed:
+                result["result"] = False
+                result["messages"] = [u"Not allowed"]
+        return result
     
 
     def state(self):
         """
+        Get the current contexts workflow state.
+        
+        returns state information
+        
+        - id: the state id
+        - name: the state name
+        - process: id and name of active workflow process
+        - transistions: list of possible transitions for the current state
+        
+        each transition includes 
+
+        - id: the id
+        - name: the name
+        - fromstate: the current state
+        - tostate: new state after axcecution
+        - actions: list of triggering actions for the transition
+        
         """
+        state = self.context.GetWfInfo(self.user)
+        if not state:
+            return {"result":False, "messages": [u"No workflow loaded for object"]}
+
+        def _serI(info):
+            return {"id":info.id, "name":info.name} 
+        
+        def _serT(transition):
+            return {"id":transition.id, 
+                    "name":transition.name, 
+                    "fromstate":transition.fromstate,
+                    "tostate":transition.tostate,
+                    "actions":[_serI(a) for a in transition.actions]}
+            
+        
+        return {"id": state["state"].id,
+                "name": state["state"].name,
+                "process": serI(state["process"]),
+                "transitions": [_serT(t) for t in state["transitions"]],
+                "result": True}
+
+
+class ItemForm(ObjectForm):
+    """
+    Contains actions for object creation and updates.
+    
+    Supports sort form parameter *pepos*.
+    """
+    actions = [
+        Conf(id=u"default",    method="StartFormRequest",  name=u"Initialize", hidden=True,  css_class=u"",            html=u"", tag=u""),
+        Conf(id=u"create",     method="CreateObj",  name=u"Create",     hidden=False, css_class=u"btn btn-primary",  html=u"", tag=u""),
+        Conf(id=u"defaultEdit",method="StartObject",name=u"Initialize", hidden=True,  css_class=u"",            html=u"", tag=u""),
+        Conf(id=u"edit",       method="UpdateObj",  name=u"Save",       hidden=False, css_class=u"btn btn-primary",  html=u"", tag=u""),
+        Conf(id=u"cancel",     method="Cancel",     name=u"Cancel",     hidden=False, css_class=u"buttonCancel",html=u"", tag=u"")
+    ]
+    defaultNewItemAction = {"actions": [u"create"],  "defaultAction": "default"}
+    defaultSetItemAction = {"actions": [u"edit"],    "defaultAction": "defaultEdit"}
+    subsets = None
+
+
