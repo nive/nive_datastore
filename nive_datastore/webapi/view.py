@@ -110,6 +110,10 @@ def ExtractJSValue(values, key, default, format):
         return default
     elif format=="int":
         return int(value)
+    elif format=="bool":
+        if value in ("1","true","True","Yes","yes","checked"):
+            return True
+        return False
     elif format=="float":
         return float(value)
     return value
@@ -206,8 +210,9 @@ class APIv1(BaseView):
 
         validated = []
         cnt = 1
+        defaulttype = values.get("pool_type")
         for values in items:
-            typename = values.get("pool_type")
+            typename = values.get("pool_type") or defaulttype
             if not typename:
                 response.status = u"400 No type given"
                 return {"error": "No type given: Item "+str(cnt), "result":[]}
@@ -353,7 +358,7 @@ class APIv1(BaseView):
     def listItems(self):
         """
         Returns a list of batched items for a single or all types stored in the current container. 
-        The result only includes the items ids. For a complete list of values use `tojson` or `search`.
+        The result only includes the items ids. For a complete list of values use `tojson` or `searchItems`.
         
         Request parameter:
         

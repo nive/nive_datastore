@@ -28,7 +28,7 @@ class root(RootBase):
 # Root definition ------------------------------------------------------------------
 #@nive_module
 configuration = RootConf(
-    id = "root",
+    id = "api",
     context = "nive_datastore.root.root",
     default = True,
     subtypes = AllTypesAllowed,
