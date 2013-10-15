@@ -5,7 +5,7 @@ import unittest
 
 from nive.helper import FormatConfTestFailure
 
-from nive_datastore import app, root
+from nive_datastore import app, root, item
 
 
 
@@ -32,3 +32,9 @@ class TestConf(unittest.TestCase):
         print FormatConfTestFailure(r)
         self.assert_(False, "Configuration Error")
 
+    def test_conf3(self):
+        r=item.configuration.test()
+        if not r:
+            return
+        print FormatConfTestFailure(r)
+        self.assert_(False, "Configuration Error")

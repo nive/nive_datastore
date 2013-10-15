@@ -21,6 +21,7 @@ class tWebapi(unittest.TestCase):
         request = testing.DummyRequest()
         request._LOCALE_ = "en"
         self.request = request
+        self.request.content_type = ""
         self.config = testing.setUp(request=request)
         self.app = app()
         self.app.Startup(self.config)
@@ -93,14 +94,14 @@ class tWebapi(unittest.TestCase):
         self.assert_(len(result["result"])==1)
         self.root.Delete(result["result"][0], user=user)
         # single item list
-        self.request.POST = {"items": json.dumps([{"pool_type": "bookmark", "link": u"the link", "comment": u"some text"}])}
+        self.request.POST = {"items": [{"pool_type": "bookmark", "link": u"the link", "comment": u"some text"}]}
         result = view.newItem()
         self.assert_(len(result["result"])==1)
         self.root.Delete(result["result"][0], user=user)
         # multiple items list
-        self.request.POST = {"items": json.dumps([{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
+        self.request.POST = {"items": [{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
                                                   {"pool_type": "bookmark", "link": u"the link 2", "comment": u"some text"},
-                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}])}
+                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}]}
         result = view.newItem()
         self.assert_(len(result["result"])==3)
         self.root.Delete(result["result"][0], user=user)
@@ -120,25 +121,25 @@ class tWebapi(unittest.TestCase):
         result = view.newItem()
         self.assert_(len(result["result"])==0)
         # single item list
-        self.request.POST = {"items": json.dumps([{"pool_type": "nonono", "link": u"the link", "comment": u"some text"}])}
+        self.request.POST = {"items": [{"pool_type": "nonono", "link": u"the link", "comment": u"some text"}]}
         result = view.newItem()
         self.assert_(len(result["result"])==0)
-        self.request.POST = {"items": json.dumps([{"link": u"the link", "comment": u"some text"}])}
+        self.request.POST = {"items": [{"link": u"the link", "comment": u"some text"}]}
         result = view.newItem()
         self.assert_(len(result["result"])==0)
         # multiple items list
-        self.request.POST = {"items": json.dumps([{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
+        self.request.POST = {"items": [{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
                                                   {"link": u"the link 2", "comment": u"some text"},
-                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}])}
+                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}]}
         result = view.newItem()
         self.assert_(len(result["result"])==0)
         
         # to many
         self.app.configuration.unlock()
         self.app.configuration.maxStoreItems = 2
-        self.request.POST = {"items": json.dumps([{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
+        self.request.POST = {"items": [{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
                                                   {"link": u"the link 2", "comment": u"some text"},
-                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}])}
+                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}]}
         result = view.newItem()
         self.app.configuration.maxStoreItems = 20
         self.app.configuration.lock()
@@ -164,7 +165,7 @@ class tWebapi(unittest.TestCase):
         self.assert_(result[0]["link"]=="the link")
         
         # get three
-        self.request.POST = {"id": json.dumps([o1.id,o2.id,o3.id])}
+        self.request.POST = {"id": [o1.id,o2.id,o3.id]}
         result = view.getItem()
         self.assert_(len(result)==3)
         self.assert_(result[0]["link"]=="the link")
@@ -173,7 +174,7 @@ class tWebapi(unittest.TestCase):
         
         # get two rigth
         self.root.Delete(o3.id, user=user)
-        self.request.POST = {"id": json.dumps([o1.id,o2.id,o3.id])}
+        self.request.POST = {"id": [o1.id,o2.id,o3.id]}
         result = view.getItem()
         self.assert_(len(result)==2)
         self.assert_(result[0]["link"]=="the link")
@@ -209,18 +210,18 @@ class tWebapi(unittest.TestCase):
         self.assert_(o.data.link=="the link new")
         
         # update single
-        self.request.POST = {"items": json.dumps([{"id": str(o1.id), "link": u"the link", "comment": u"some text"}])}
+        self.request.POST = {"items": [{"id": str(o1.id), "link": u"the link", "comment": u"some text"}]}
         result = view.setItem()
         self.assert_(len(result["result"])==1)
         o = self.root.GetObj(result["result"][0])
         self.assert_(o.data.link=="the link")
         
         # update multiple
-        self.request.POST = {"items": json.dumps([
+        self.request.POST = {"items": [
                              {"id": str(o1.id), "link": u"the link new", "comment": u"some text"},
                              {"id": str(o2.id), "url": u"the url new"},
                              {"id": str(o3.id), "link": u"the link new", "comment": u"some text"},
-                             ])}
+                             ]}
         result = view.setItem()
         self.assert_(len(result["result"])==3)
         o = self.root.GetObj(result["result"][0])
@@ -241,32 +242,32 @@ class tWebapi(unittest.TestCase):
         self.assert_(len(result["result"])==0)
         
         # update single
-        self.request.POST = {"items": json.dumps([{"link": u"the link", "comment": u"some text"}])}
+        self.request.POST = {"items": [{"link": u"the link", "comment": u"some text"}]}
         result = view.setItem()
         self.assert_(len(result["result"])==0)
         
         # not found
-        self.request.POST = {"items": json.dumps([
+        self.request.POST = {"items": [
                              {"id": str(o1.id), "link": u"the link new", "comment": u"some text"},
                              {"id": "999999999", "url": u"the url new"},
                              {"id": str(o3.id), "link": u"the link new", "comment": u"some text"},
-                             ])}
+                             ]}
         result = view.setItem()
         self.assert_(len(result["result"])==0)
         # no id
-        self.request.POST = {"items": json.dumps([
+        self.request.POST = {"items": [
                              {"id": str(o1.id), "link": u"the link new", "comment": u"some text"},
                              {"url": u"the url new"},
                              {"id": str(o3.id), "link": u"the link new", "comment": u"some text"},
-                             ])}
+                             ]}
         result = view.setItem()
         self.assert_(len(result["result"])==0)
         # validation error
-        self.request.POST = {"items": json.dumps([
+        self.request.POST = {"items": [
                              {"id": str(o1.id), "link": u"the link new", "comment": u"some text"},
                              {"id": str(o2.id), "number": 444},
                              {"id": str(o3.id), "link": u"the link new", "comment": u"some text"},
-                             ])}
+                             ]}
         result = view.setItem()
         self.assert_(len(result["result"])==0)
 
@@ -291,7 +292,7 @@ class tWebapi(unittest.TestCase):
         self.assert_(o==None)
 
         # delete two
-        self.request.POST = {"id": json.dumps([str(o2.id),str(o3.id)])}
+        self.request.POST = {"id": [str(o2.id),str(o3.id)]}
         result = view.deleteItem()
         self.assert_(len(result["result"])==2)
         o = self.root.GetObj(o2.id)

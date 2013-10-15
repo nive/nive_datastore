@@ -32,7 +32,7 @@ configuration = RootConf(
     context = "nive_datastore.root.root",
     default = True,
     subtypes = AllTypesAllowed,
-    extensions = None,
+    extensions = ("nive_datastore.pydispatch.Dispatcher",),
     name = _(u"Data root"),
     description = u""
 )

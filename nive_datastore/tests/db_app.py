@@ -12,7 +12,7 @@ from nive_datastore.app import DataStorage
 from nive.tests import __local
 
 
-collection1 = ObjectConf(
+collection1 = ObjectConf("nive_datastore.item",
     id = "bookmark",
     name = u"Bookmarks",
     dbparam = "bookmarks",
@@ -30,7 +30,7 @@ collection1 = ObjectConf(
     template = "nive_datastore.webapi.tests:bookmark.pt"
 )
 
-collection2 = ObjectConf(
+collection2 = ObjectConf("nive_datastore.item",
     id = "track",
     name = u"Track",
     dbparam = "tracks",

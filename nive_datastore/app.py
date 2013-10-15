@@ -123,10 +123,11 @@ configuration.modules = [
     # items / collections
     # -> no collections defined by default. See documentation how to define collections 
     #    based on 'nive.definitions.ObjectConf' 
-    # root
-    "nive_datastore.root",  
+    # root 
+    "nive_datastore.root",
     # web api (view layer)
-    "nive_datastore.webapi",
+    "nive_datastore.webapi.view.container_views",
+    "nive_datastore.webapi.view.item_views",
     #extensions
     #"nive.components.extensions.localgroups",
     # tools

@@ -16,40 +16,49 @@ from nive.forms import Form, ObjectForm
 # view module definition ------------------------------------------------------------------
 
 #@nive_module
-configuration = ViewModuleConf(
-    id = "DatastoreAPIv1",
-    name = _(u"Data storage api"),
+container_views = ViewModuleConf(
+    id = "DatastoreAPIv1-Container",
+    name = _(u"Data storage container api"),
     containment = "nive_datastore.app.DataStorage",
     view = "nive_datastore.webapi.view.APIv1",
-    context="nive.definitions.IObject",
+    context = "nive.definitions.IContainer",
+    views = (
+        # container/root
+        ViewConf(name="getItem",   attr="getItem",   permission="read",   renderer="json", context="nive.definitions.IContainer"),
+        ViewConf(name="newItem",   attr="newItem",   permission="add",    renderer="json", context="nive.definitions.IContainer"),
+        ViewConf(name="setItem",   attr="setItem",   permission="update", renderer="json", context="nive.definitions.IContainer"),
+        ViewConf(name="deleteItem",attr="deleteItem",permission="delete", renderer="json", context="nive.definitions.IContainer"),
+        ViewConf(name="listItems", attr="listItems", permission="search", renderer="json", context="nive.definitions.IContainer"),
+        ViewConf(name="searchItems",attr="searchItems",permission="search",renderer="json",context="nive.definitions.IContainer")
+    )
 )
 
-configuration.views = (
-    # container/root
-    ViewConf(name="getItem",   attr="getItem",   permission="read",   renderer="json", context="nive.definitions.IContainer"),
-    ViewConf(name="newItem",   attr="newItem",   permission="add",    renderer="json", context="nive.definitions.IContainer"),
-    ViewConf(name="setItem",   attr="setItem",   permission="update", renderer="json", context="nive.definitions.IContainer"),
-    ViewConf(name="deleteItem",attr="deleteItem",permission="delete", renderer="json", context="nive.definitions.IContainer"),
-    ViewConf(name="listItems", attr="listItems", permission="search", renderer="json", context="nive.definitions.IContainer"),
-    ViewConf(name="searchItems",attr="searchItems",permission="search",renderer="json",context="nive.definitions.IContainer"),
-    # item
-    ViewConf(name="",        attr="getContext",  permission="read",   renderer="json"),
-    ViewConf(name="update",  attr="setContext",  permission="update", renderer="json"),
-    # rendering
-    ViewConf(name="toJson",  attr="toJson",  permission="tojson",  renderer="json"),
-    ViewConf(name="render",  attr="render",  permission="render"),
-    # forms
-    ViewConf(name="newItemForm",    attr="newItemForm",    permission="addform", renderer="json"),
-    ViewConf(name="setItemForm",    attr="setItemForm",    permission="updateform", renderer="json"),
-    # workflow
-    ViewConf(name="action", attr="action",   permission="action",  renderer="json"),
-    ViewConf(name="state",  attr="state",    permission="state",   renderer="json"),
+#@nive_module
+item_views = ViewModuleConf(
+    id = "DatastoreAPIv1-Item",
+    name = _(u"Data storage item api"),
+    containment = "nive_datastore.app.DataStorage",
+    view = "nive_datastore.webapi.view.APIv1",
+    context = "nive.definitions.IObject",
+    views = (
+        # item
+        ViewConf(name="",        attr="getContext",  permission="read",   renderer="json"),
+        ViewConf(name="update",  attr="setContext",  permission="update", renderer="json"),
+        # rendering
+        ViewConf(name="toJson",  attr="toJson",  permission="tojson",  renderer="json"),
+        ViewConf(name="render",  attr="render",  permission="render"),
+        # forms
+        ViewConf(name="newItemForm",    attr="newItemForm",    permission="addform", renderer="json"),
+        ViewConf(name="setItemForm",    attr="setItemForm",    permission="updateform", renderer="json"),
+        # workflow
+        ViewConf(name="action", attr="action",   permission="action",  renderer="json"),
+        ViewConf(name="state",  attr="state",    permission="state",   renderer="json"),
+    )
 )
-
 
 DefaultMaxStoreItems = 20
 DefaultMaxBatchNumber = 100
-jsUndefined = (u"", u"null", u"undefined")
+jsUndefined = (u"", u"null", u"undefined", None)
 ignoreFields = ("pool_dataref","pool_datatbl")
 
 # internal data processing ------------------------------------------------------------
@@ -111,7 +120,7 @@ def ExtractJSValue(values, key, default, format):
     elif format=="int":
         return int(value)
     elif format=="bool":
-        if value in ("1","true","True","Yes","yes","checked"):
+        if value in (1, True, "1","true","True","Yes","yes","checked"):
             return True
         return False
     elif format=="float":
@@ -134,16 +143,13 @@ class APIv1(BaseView):
         """
         response = self.request.response
         ids = self.GetFormValue("id")
-        if ids:
+        if not isinstance(ids, (list,tuple)):
             try:
                 ids = [int(ids)]
-            except ValueError:
-                try:
-                    ids = json.loads(ids)
-                except ValueError:
-                    # set http response code (invalid request)
-                    response.status = u"400 Invalid id"
-                    return {"error": u"Invalid id"}
+            except (ValueError, TypeError):
+                # set http response code (invalid request)
+                response.status = u"400 Invalid id"
+                return {"error": u"Invalid id"}
         if not ids:
             # set http response code (invalid request)
             response.status = u"400 Empty id"
@@ -189,7 +195,8 @@ class APIv1(BaseView):
             if not typeconf:
                 response.status = u"400 Unknown type"
                 return {"error": "Unknown type", "result":[]}
-            result, values, errors = SerializeItem(self, values, typename=typeconf, formsubset="newItem")
+            subset = self.GetFormValue("subset") or "newItem"
+            result, values, errors = SerializeItem(self, values, typename=typeconf, formsubset=subset)
             if not result:
                 response.status = u"400 Validation error"
                 return {"error": str(errors), "result":[]}
@@ -199,10 +206,6 @@ class APIv1(BaseView):
                 return {"error": "Validation error", "result":[]}
             return {"result": [item.id]}
 
-        items = json.loads(self.GetFormValue("items"))
-        if not items:
-            response.status = u"400 Validation error"
-            return {"error": "Validation error", "result":[]}
         maxStoreItems = self.context.app.configuration.get("maxStoreItems") or DefaultMaxStoreItems
         if len(items) > maxStoreItems:
             response.status = u"413 Too many items"
@@ -210,7 +213,7 @@ class APIv1(BaseView):
 
         validated = []
         cnt = 1
-        defaulttype = values.get("pool_type")
+        defaulttype = self.GetFormValue("pool_type")
         for values in items:
             typename = values.get("pool_type") or defaulttype
             if not typename:
@@ -220,7 +223,8 @@ class APIv1(BaseView):
             if not typeconf:
                 response.status = u"400 Unknown type"
                 return {"error": "Unknown type", "result":[]}
-            result, values, errors = SerializeItem(self, values, typename=typeconf, formsubset="newItem")
+            subset = self.GetFormValue("subset") or "newItem"
+            result, values, errors = SerializeItem(self, values, typename=typeconf, formsubset=subset)
             if not result:
                 response.status = u"400 Validation error"
                 return {"error": str(errors), "result":[]}
@@ -256,8 +260,8 @@ class APIv1(BaseView):
         user = self.User()
 
         items = self.GetFormValue("items")
-        if not items:
-            values = self.GetFormValues()
+        if not items or isinstance(items, dict):
+            values = items or self.GetFormValues()
             id = values.get("id")
             if not id:
                 response.status = u"400 No id given"
@@ -266,7 +270,8 @@ class APIv1(BaseView):
             if not item:
                 response.status = u"404 Not found"
                 return {"error": "Not found", "result": []}
-            result, values, errors = SerializeItem(self, values, typename=item.configuration, formsubset="setItem")
+            subset = self.GetFormValue("subset") or "setItem"
+            result, values, errors = SerializeItem(self, values, typename=item.configuration, formsubset=subset)
             if not result:
                 response.status = u"400 Validation error"
                 return {"error": str(errors), "result": []}
@@ -276,10 +281,6 @@ class APIv1(BaseView):
                 return {"error": "Storage error", "result": []}
             return {"result": [item.id]}
 
-        items = json.loads(self.GetFormValue("items"))
-        if not items:
-            response.status = u"400 Validation error"
-            return {"error": "Validation error", "result": []}
         maxStoreItems = self.context.app.configuration.get("maxStoreItems") or DefaultMaxStoreItems
         if len(items) > maxStoreItems:
             response.status = u"413 Too many items"
@@ -296,7 +297,8 @@ class APIv1(BaseView):
             if not item:
                 response.status = u"404 Not found"
                 return {"error": "Not found: Item "+str(cnt), "result": []}
-            result, values, errors = SerializeItem(self, values, typename=item.configuration, formsubset="setItem")
+            subset = self.GetFormValue("subset") or "setItem"
+            result, values, errors = SerializeItem(self, values, typename=item.configuration, formsubset=subset)
             if not result:
                 response.status = u"400 Validation error"
                 return {"error": str(errors), "result": []}
@@ -331,14 +333,12 @@ class APIv1(BaseView):
             response.status = u"400 Empty id"
             return {"error": u"Empty id", "result": []}
 
-        try:
-            ids = [int(ids)]
-        except ValueError:
+        if not isinstance(ids, list):
             try:
-                ids = json.loads(ids)
+                ids = [int(ids)]
             except ValueError:
                 ids=None
-        if not ids or not isinstance(ids, list):
+        if not ids:
             # set http response code (invalid request)
             response.status = u"400 Invalid id"
             return {"error": u"Invalid id.", "result": []}
@@ -533,7 +533,6 @@ class APIv1(BaseView):
         
         returns json encoded data        
         """
-        response = self.request.response
         item = self.context
         return DeserializeItems(self, item)[0]
     
@@ -551,7 +550,8 @@ class APIv1(BaseView):
         """
         response = self.request.response
         item = self.context
-        result, values, errors = SerializeItem(self, self.GetFormValues(), typename=self.context.configuration, formsubset="setItem")
+        subset = self.GetFormValue("subset") or "setItem"
+        result, values, errors = SerializeItem(self, self.GetFormValues(), typename=self.context.configuration, formsubset=subset)
         if not result:
             response.status = u"400 Validation error"
             return {"error": str(errors)}
