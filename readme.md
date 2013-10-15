@@ -21,7 +21,30 @@ on the website is stable will not change.
 ## Source code
 The source code is hosted on github: https://github.com/nive/nive_datastore
 
-## Documentation and installation
+## Documentation
 http://datastore.nive.co
+
+## Installation
+
+1) download and install packages
+   
+  bin/pip install nive_datastore
+
+2) create a new datastore project and activate it
+
+replace `datastoreSqlite` with `datastoreMysql` to use MySql as database server
+
+  bin/pcreate -t datastoreSqlite myStorage
+  cd myStorage
+  ../bin/python setup.py develop
+
+3)
+
+Add new data collection configurations in __init__.py
+
+4) start pyramid
+
+  ../bin/pserve development.ini
+
 
 
