@@ -42,7 +42,12 @@ setupkw = dict(
       zip_safe=False,
       install_requires=requires,
       tests_require=requires,
-      test_suite="nive_datastore"
+      test_suite="nive_datastore",
+      entry_points = """\
+        [pyramid.scaffold]
+        datastoreSqlite=nive_datastore.scaffolds:DatastoreSqliteTemplate
+        datastoreMysql=nive_datastore.scaffolds:DatastoreMysqlTemplate
+      """
 )
 
 # uses babel and lingua

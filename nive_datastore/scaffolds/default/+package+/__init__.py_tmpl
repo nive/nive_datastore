@@ -1,0 +1,192 @@
+
+import base64
+
+from nive.definitions import DatabaseConf
+from nive.definitions import AppConf
+from nive.definitions import ObjectConf
+from nive.definitions import FieldConf
+from nive.definitions import ToolConf
+from nive.definitions import ViewModuleConf
+from nive.definitions import PortalConf
+from nive.portal import Portal
+
+from nive.security import Allow, Everyone, ALL_PERMISSIONS
+
+
+"""
+Todo storage configuration 
+--------------------------------
+This will start a default instance and use sqlite  
+``data/todos.db`` or mysql as database and ``data/files`` as root directory for binary files.
+ 
+Default values are loaded from :py:module:``nive_datastore.app``.
+
+Please refer to :py:class:``nive.definitions.AppConf`` and :py:class:``nive.definitions.DatabaseConf``
+for all configuration options. 
+"""
+storage = AppConf("nive_datastore.app",
+    title=u"Scaffold application", 
+    id="{{package}}",
+
+    # search profile example
+    #profiles={"public": {
+    #            "pool_type": "todo",
+    #           "fields": ["id", "text", "done", "archive"],
+    #           "parameter": {"archive":0}
+    #          },
+    #},
+    defaultProfile = "public",
+
+    # uncomment to remove all permissions
+    #acl = (
+    #    (Allow, Everyone, ALL_PERMISSIONS), 
+    #)
+)
+dbConfiguration = DatabaseConf(
+    fileRoot="{{root}}/files",
+    # {{comment}} 
+    {{param_datastore}}
+)
+storage.modules.append(dbConfiguration)
+
+"""
+Example: Todo data collection definition
+-------------------------------
+A simple todo item with text, note, done flag and archive flag. Create and modified dates and 
+user information are automatically handled by the system. 
+"""
+#todo = ObjectConf("nive_datastore.item",
+#    id = "todo",
+#    name = u"Todo",
+#    dbparam = "todos",
+#    subtypes = None,
+#    data = (
+#        FieldConf(id="text",     datatype="text", size=5000,  default=u"",  name=u"Todo", required=True),
+#        FieldConf(id="done",     datatype="bool", size=2,     default=False,name=u"Done"),
+#        FieldConf(id="archive",  datatype="bool", size=2,     default=False,name=u"Archive"),
+#        FieldConf(id="note",     datatype="text", size=5000,  default=u"",  name=u"Note"),
+#        FieldConf(id="todogroup",datatype="string",size=10,   default=u"",  name=u"Gruppe"),
+#    ),
+#    forms = {
+#        "newItem": {"fields": ("text","todogroup"), "ajax":True}, 
+#        "setItem": {"fields": ("id","done",), "ajax":True},
+#        "setItem2":{"fields": ("id","done","note"), "ajax":True},
+#        "archive": {"fields": ("id","archive",), "ajax":True}
+#    },
+#    render = ("id", "text", "done", "todogroup"),
+#    template = "todostore:todo.pt"
+#)
+#storage.modules.append(todo)
+
+
+# add a static directory for html and js files. remove if not needed.
+static = ViewModuleConf(
+    id = "files",
+    static="{{package}}:static"
+)
+storage.modules.append(static)
+
+
+"""
+User database
+-------------
+This will include the user database instance and use sqlite  
+``data/website.db`` as database and ``data/files`` as root directory for binary files.
+ 
+Default values are loaded from :py:module:``nive_cms.app``.
+
+Please refer to :py:class:``nive.definitions.AppConf`` and :py:class:``nive.definitions.DatabaseConf``
+for all configuration options. 
+"""
+userdb = AppConf("nive_userdb.app",
+        title = u"Userdatabase", 
+        id = "userdb",
+        userAdmin = (u"{{adminemail}}", u"Admin"),
+        admin = {"name": "{{adminuser}}", "password": base64.decodestring("{{adminpass}}"), "email": ""},
+)
+dbConfiguration = DatabaseConf(
+    fileRoot="{{root}}/filesuserdb",
+    # {{comment}} 
+    {{param_user}}
+)
+userdb.modules.append(dbConfiguration)
+
+sendMail = ToolConf("nive.components.tools.sendMail",
+    values = {
+        "host":"",
+        "port":"",
+        "sender":"",
+        "user":"",
+        "pass_":"",
+        "sendername":"My Storage",
+        "fromMail":""
+    }
+)
+userdb.modules.append(sendMail)
+
+"""
+Portal
+-------------------------
+Create the portal as container for the cms and user database.  
+"""
+portal = Portal()
+portal.Register(storage)
+portal.Register(userdb)
+
+
+"""
+Pyramid wsgi main function
+---------------------------
+Following options set up pyramid, sessions, authentication and more.
+This is just a basic setup. pyramid offers may more options. 
+
+nive itself is set up and started by ::
+
+    portal.Startup(config, debug=True) 
+
+Further server options like logging and debug tools are included in 
+``production.ini`` and ``development.ini``.
+"""
+
+from pyramid.authentication import AuthTktAuthenticationPolicy
+from pyramid.authorization import ACLAuthorizationPolicy
+
+from pyramid.config import Configurator
+from pyramid.response import Response
+
+from pyramid.session import UnencryptedCookieSessionFactoryConfig
+
+def getRoot(request):
+    return portal
+
+def main(global_config, **settings):
+    """
+    wsgi main function
+    """
+    portal = getRoot(None)
+
+    session_factory = UnencryptedCookieSessionFactoryConfig('{{cookiesecret}}')
+    
+    if hasattr(portal, "userdb"):
+        # authorization 
+        authn = AuthTktAuthenticationPolicy(secret='{{authsecret}}', callback=portal.userdb.Groupfinder)
+        authz = ACLAuthorizationPolicy()
+        
+        # This function returns a Pyramid WSGI application.
+        config = Configurator(root_factory = getRoot, 
+                              settings = settings,
+                              authentication_policy = authn,
+                              authorization_policy = authz,
+                              session_factory = session_factory)
+    else:
+        # This function returns a Pyramid WSGI application.
+        config = Configurator(root_factory = getRoot, 
+                              settings = settings,
+                              session_factory = session_factory)
+    config.include('pyramid_chameleon')
+        
+    # init nive
+    portal.Startup(config, debug=True)
+    config.commit()
+
+    return config.make_wsgi_app()
