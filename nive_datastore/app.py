@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2012, 2013 Arndt Droullier, Nive GmbH. All rights reserved.
 # Released under GPL3. See license.txt
+# Released under GPL3. See license.txt
 
 """
 Nive Datastore Application configuration (sqlite example) and usage
