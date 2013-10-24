@@ -91,7 +91,7 @@ def app(confs=()):
         a.Query("select id from tracks where id=1")
         a.Query("select id from pool_files where id=1")
     except:
-        a.GetTool("nive.components.tools.dbStructureUpdater")()
+        a.GetTool("nive.tools.dbStructureUpdater")()
     return a
 
 def app_nodb():

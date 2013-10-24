@@ -132,7 +132,7 @@ configuration.modules = [
     #extensions
     #"nive.components.extensions.localgroups",
     # tools
-    "nive.components.tools.dbStructureUpdater", "nive.components.tools.dbSqldataDump", "nive.components.tools.statistics",
+    "nive.tools.dbStructureUpdater", "nive.tools.dbSqlDump", "nive.tools.cmsstatistics",
     # administration and persistence
     "nive.adminview",
     "nive.components.extensions.persistence.dbPersistenceConfiguration"
