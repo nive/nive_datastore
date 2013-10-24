@@ -130,12 +130,12 @@ configuration.modules = [
     "nive_datastore.webapi.view.container_views",
     "nive_datastore.webapi.view.item_views",
     #extensions
-    #"nive.components.extensions.localgroups",
+    #"nive.extensions.localgroups",
     # tools
     "nive.tools.dbStructureUpdater", "nive.tools.dbSqlDump", "nive.tools.cmsstatistics",
     # administration and persistence
     "nive.adminview",
-    "nive.components.extensions.persistence.dbPersistenceConfiguration"
+    "nive.extensions.persistence.dbPersistenceConfiguration"
 ]
 
 
