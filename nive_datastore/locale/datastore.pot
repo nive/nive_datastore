@@ -1,0 +1,35 @@
+# Translations template for nive_datastore.
+# Copyright (C) 2013 ORGANIZATION
+# This file is distributed under the same license as the nive_datastore project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2013.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: nive_datastore 0.9.12\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2013-12-18 16:41+0100\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 0.9.6\n"
+
+#: nive_datastore/item.py:29
+msgid "Data item"
+msgstr ""
+
+#: nive_datastore/root.py:37
+msgid "Data root"
+msgstr ""
+
+#: nive_datastore/webapi/view.py:21
+msgid "Data storage container api"
+msgstr ""
+
+#: nive_datastore/webapi/view.py:39
+msgid "Data storage item api"
+msgstr ""
+
