@@ -117,7 +117,8 @@ configuration = AppConf(
     title = u"Nive Data Storage",
     context = "nive_datastore.app.DataStorage",
     workflowEnabled = False,
-    meta = copy.deepcopy(list(SystemFlds)) + copy.deepcopy(list(UserFlds)) 
+    meta = copy.deepcopy(list(SystemFlds)) + copy.deepcopy(list(UserFlds)),
+    translations="nive_datastore:locale/"
 )
 
 configuration.modules = [
