@@ -9,7 +9,7 @@ functional components and a Web API.
 - Python and Json collection configuration
 - Hierarchical cotainer support for data 
 - Web API and Python connectors
-- Worflow support
+- Workflow support
 - Json and custom data renderes
 - Build in form generator
 - Detailed security permissions
