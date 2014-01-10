@@ -9,8 +9,6 @@ from nive.definitions import *
 from nive.portal import Portal
 from nive_datastore.app import DataStorage
 
-from nive.tests import __local
-
 
 collection1 = ObjectConf("nive_datastore.item",
     id = "bookmark",
@@ -47,11 +45,6 @@ collection2 = ObjectConf("nive_datastore.item",
 )
 
 
-dbconf = DatabaseConf(
-    dbName = __local.ROOT+"datastore.db",
-    fileRoot = __local.ROOT,
-    context = "Sqlite3"
-)
 appconf = AppConf("nive_datastore.app",
     profiles={"bookmarks":  
                   {"pool_type": "bookmark", 
@@ -73,12 +66,12 @@ appconf = AppConf("nive_datastore.app",
 appconf.modules.append(collection1)
 appconf.modules.append(collection2)
 
-def app(confs=()):
+def app_db(confs=None):
     a = DataStorage()
     a.Register(appconf)
-    a.Register(dbconf)
-    for c in confs:
-        a.Register(c)
+    if confs:
+        for c in confs:
+            a.Register(c)
     p = Portal()
     p.Register(a)
     a.Startup(None)
@@ -103,7 +96,12 @@ def app_nodb():
     #a.Startup(None)
     return a
 
-def root(a):
-    r = a.GetRoot()
-    return r
+def create_bookmark(c, user):
+    type = "bookmark"
+    data = {"link": u"the link", "comment": u"some text"}
+    return c.Create(type, data=data, user=user)
 
+def create_track(c, user):
+    type = "track"
+    data = {"url": u"the url", "number": 123, "something": u"some text"}
+    return c.Create(type, data=data, user=user)

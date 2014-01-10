@@ -5,9 +5,9 @@ import unittest
 
 from nive.definitions import Conf, ConfigurationError
 from nive.security import User
-from nive_datastore.tests.db_app import *
-from nive_datastore.tests.test_app import create_bookmark, create_track
 from nive_datastore.webapi.view import *
+from nive_datastore.tests.db_app import *
+from nive_datastore.tests import __local
 
 from pyramid import testing 
 from pyramid.httpexceptions import HTTPFound
@@ -15,7 +15,7 @@ from pyramid.renderers import render
 
 
 
-class tWebapi(unittest.TestCase):
+class tWebapi(__local.DefaultTestCase):
 
     def setUp(self):
         request = testing.DummyRequest()
@@ -23,7 +23,7 @@ class tWebapi(unittest.TestCase):
         self.request = request
         self.request.content_type = ""
         self.config = testing.setUp(request=request)
-        self.app = app()
+        self._loadApp()
         self.app.Startup(self.config)
         self.root = self.app.root()
         user = User(u"test")
