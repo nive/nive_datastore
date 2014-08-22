@@ -16,7 +16,7 @@ from pyramid.renderers import render
 
 
 
-class tWebapi(__local.DefaultTestCase):
+class tWebapiDispatch_db(object):
 
     def setUp(self):
         request = testing.DummyRequest()
@@ -114,3 +114,23 @@ class tWebapi(__local.DefaultTestCase):
         result, stat = self.root.dispatch("newItem", True, self.request, **param)
         self.assert_(len(result["result"])==1)
         self.root.Delete(result["result"][0], user=user)
+        
+        
+
+class tWebapiDispatch_db_sqlite(tWebapiDispatch_db, __local.SqliteTestCase):
+    """
+    see tests.__local
+    """
+
+class tWebapiDispatch_db_mysql(tWebapiDispatch_db, __local.MySqlTestCase):
+    """
+    see tests.__local
+    """
+    
+class tWebapiDispatch_db_pg(tWebapiDispatch_db, __local.PostgreSqlTestCase):
+    """
+    see tests.__local
+    """
+
+
+

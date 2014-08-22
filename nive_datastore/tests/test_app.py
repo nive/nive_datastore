@@ -85,4 +85,6 @@ class AppTest_db_Sqlite(AppTest_db, __local.SqliteTestCase):
 class AppTest_db_MySql(AppTest_db, __local.MySqlTestCase):
     pass
     
+class AppTest_db_Postgres(AppTest_db, __local.PostgreSqlTestCase):
+    pass
         

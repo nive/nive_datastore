@@ -15,7 +15,7 @@ from pyramid.renderers import render
 
 
 
-class tWebapi(__local.DefaultTestCase):
+class tWebapi_db(object):
 
     def setUp(self):
         request = testing.DummyRequest()
@@ -23,6 +23,7 @@ class tWebapi(__local.DefaultTestCase):
         self.request = request
         self.request.content_type = ""
         self.config = testing.setUp(request=request)
+        self.config.include('pyramid_chameleon')
         self._loadApp()
         self.app.Startup(self.config)
         self.root = self.app.root()
@@ -804,3 +805,25 @@ class tWebapi(__local.DefaultTestCase):
 
         result = view.state()
         self.assertFalse(result["result"])
+
+
+
+
+
+class tWebapi_db_sqlite(tWebapi_db, __local.SqliteTestCase):
+    """
+    see tests.__local
+    """
+
+class tWebapi_db_mysql(tWebapi_db, __local.MySqlTestCase):
+    """
+    see tests.__local
+    """
+    
+class tWebapi_db_pg(tWebapi_db, __local.PostgreSqlTestCase):
+    """
+    see tests.__local
+    """
+
+
+
