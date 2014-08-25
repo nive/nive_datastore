@@ -46,5 +46,9 @@ Add new data collection configurations in __init__.py
 
   ../bin/pserve development.ini
 
+### Translations
+Translations can be extracted using lingua>=3.1
 
+    > pip install lingua-3.1
+    > bin/pot-create -o nive_datastore/locale/nive_datastore.pot nive_datastore
 
