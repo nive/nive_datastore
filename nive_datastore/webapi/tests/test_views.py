@@ -571,7 +571,7 @@ class tWebapi_db(object):
 
         profile = {
             "container": False,
-            "fields": ["id", "pool_changedby"],
+            "fields": ["pool_type"],
             "parameter": {"pool_changedby":"test"},
             "operators": {"pool_changedby":"="},
             "groupby": "pool_type"
@@ -615,6 +615,7 @@ class tWebapi_db(object):
             self.app.configuration.profiles = profiles
             self.app.configuration.lock()
             raise
+        self.app.configuration.profiles = profiles
         self.assert_(result["error"])
         self.assert_(len(result["items"])==0)
         self.app.configuration.lock()

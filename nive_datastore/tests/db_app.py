@@ -65,6 +65,7 @@ appconf = AppConf("nive_datastore.app",
 )
 appconf.modules.append(collection1)
 appconf.modules.append(collection2)
+appconf.lock()
 
 def app_db(confs=None):
     a = DataStorage()
