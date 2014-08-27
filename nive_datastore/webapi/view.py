@@ -487,7 +487,7 @@ class APIv1(BaseView):
                 response.status = u"400 No search profiles found"
                 return {"error": "No search profiles found", "items":[]}
 
-            profilename = self.GetFormValue("profile") or self.context.app.configuration.get("defaultProfile")
+            profilename = self.GetFormValue("profile") or self.context.app.configuration.get("defaultSearch")
             if not profilename:
                 response.status = u"400 Empty search profile name"
                 return {"error": "Empty search profile name", "items":[]}
@@ -615,7 +615,8 @@ class APIv1(BaseView):
         
         # prepare parameter
         parameter = {}
-        parameter.update(profile.parameter)
+        if profile.get("parameter"):
+            parameter.update(profile.parameter)
         if not "pool_type" in parameter:
             parameter["pool_type"] = fields.keys()
         
@@ -693,19 +694,23 @@ class APIv1(BaseView):
         returns json document
         """
         if not profile:
+            def returnError(error, status):
+                data = json.dumps(error)
+                return self.SendResponse(data, mime="application/json", raiseException=False, status=status)
+            
             profiles = self.context.app.configuration.get("subtree")
             if not profiles:
-                response.status = u"400 No subtree profile found"
-                return {"error": "No subtree profile found"}
+                status = u"400 No subtree profile found"
+                return returnError({"error": "No subtree profile found"}, status)
 
             profilename = self.GetFormValue("profile") or self.context.app.configuration.get("defaultSubtree")
             if not profilename:
-                response.status = u"400 Empty subtree profile name"
-                return {"error": "Empty subtree profile name"}
+                status = u"400 Empty subtree profile name"
+                return returnError({"error": "Empty subtree profile name"}, status)
             profile = profiles.get(profilename)
             if not profile:
-                response.status = u"400 Unknown profile"
-                return {"error": "Unknown profile"}
+                status = u"400 Unknown profile"
+                return returnError({"error": "Unknown profile"}, status)
         
         if isinstance(profile, dict):
             profile = Conf(**profile)
@@ -714,6 +719,7 @@ class APIv1(BaseView):
         data = JsonDataEncoder().encode(values)
         return self.SendResponse(data, mime="application/json", raiseException=False)
         
+
     def renderTmpl(self, template=None):
         """
         Renders the items template defined in the configuration (`ObjectConf.template`). The template

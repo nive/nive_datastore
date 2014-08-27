@@ -24,7 +24,7 @@ collection1 = ObjectConf("nive_datastore.item",
         "newItem": {"fields": ("link", "share", "comment"), "ajax":True, "newItem": True}, 
         "setItem": {"fields": ("link", "share", "comment"), "ajax":True}
     },
-    render = ("id", "link", "comment", "pool_changedby", "pool_change"),
+    toJson = ("id", "link", "comment", "pool_changedby", "pool_change"),
     template = "nive_datastore.webapi.tests:bookmark.pt"
 )
 
@@ -46,7 +46,7 @@ collection2 = ObjectConf("nive_datastore.item",
 
 
 appconf = AppConf("nive_datastore.app",
-    profiles={"bookmarks":  
+    search={"bookmarks":  
                   {"pool_type": "bookmark", 
                    "container": False,
                    "fields": ["id", "link", "comment", "pool_changedby"],
@@ -61,7 +61,7 @@ appconf = AppConf("nive_datastore.app",
                    "fields": ["id", "pool_create", "pool_changedby"],
                    "parameter": {}},
     },
-    defaultProfile = "all"
+    defaultSearch = "all"
 )
 appconf.modules.append(collection1)
 appconf.modules.append(collection2)

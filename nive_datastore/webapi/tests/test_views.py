@@ -485,7 +485,7 @@ class tWebapi_db(object):
 
         self.request.POST = {}
         result = view.searchItems()
-        self.assert_(len(result["items"])==6)
+        self.assert_(len(result["items"])==6, result)
 
         self.request.POST = {"profile":"bookmarks"}
         result = view.searchItems()
@@ -605,17 +605,17 @@ class tWebapi_db(object):
         self.assert_(len(result["items"])==0)
 
         # testing listings and parameter
-        profiles = self.app.configuration.profiles
+        profiles = self.app.configuration.search
         self.app.configuration.unlock()
-        self.app.configuration.profiles = None
+        self.app.configuration.search = None
         self.request.POST = {"profile": "all"}
         try:
             result = view.searchItems()
         except:
-            self.app.configuration.profiles = profiles
+            self.app.configuration.search = profiles
             self.app.configuration.lock()
             raise
-        self.app.configuration.profiles = profiles
+        self.app.configuration.search = profiles
         self.assert_(result["error"])
         self.assert_(len(result["items"])==0)
         self.app.configuration.lock()
@@ -639,11 +639,19 @@ class tWebapi_db(object):
         create_track(o1, user)
         create_track(o3, user)
 
-        values = view.toJson()
-        self.assert_(values=={})
+        values = view.subtree()
+        self.assert_(values.status.startswith("400"))
 
-        self.request.POST = {"subtree": "1"}
-        values = view.toJson()
+        values = view.subtree(profile={})
+        self.assert_(values.status.startswith("400"))
+
+        self.request.POST = {"profile": "none"}
+        values = view.subtree()
+        self.assert_(values.status.startswith("400"))
+
+        profile = {"descent": ("nive.definitions.IObject",), "fields": {}}
+        response = view.subtree(profile=profile)
+        values = json.loads(response.body)
         self.assert_(values!={})
         self.assert_(len(values["items"])==2)
         self.assert_(len(values["items"][0]["items"])==1)
@@ -652,7 +660,8 @@ class tWebapi_db(object):
                                             
         view = APIv1(o1, self.request)
         self.request.POST = {"subtree": "0"}
-        values = view.toJson()
+        response = view.subtree()
+        values = json.loads(response.body)
         self.assert_(values!={})
         self.assert_(values.get("items")==None)
         
