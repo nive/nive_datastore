@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2012, 2013 Arndt Droullier, Nive GmbH. All rights reserved.
+# Copyright 2012-2014 Arndt Droullier, Nive GmbH. All rights reserved.
 # Released under GPL3. See license.txt
 
 """
@@ -142,23 +142,6 @@ configuration.modules = [
 
 configuration.acl = [
     (Allow, Everyone, 'view'),
-    (Allow, 'group:reader', 'read'),
-    (Allow, 'group:reader', 'search'),
-    (Allow, 'group:reader', 'tojson'),
-    (Allow, 'group:reader', 'toxml'),
-    (Allow, 'group:reader', 'render'),
-
-    (Allow, 'group:manager', 'read'),
-    (Allow, 'group:manager', 'add'),
-    (Allow, 'group:manager', 'update'), 
-    (Allow, 'group:manager', 'delete'), 
-    (Allow, 'group:manager', 'search'),
-    (Allow, 'group:manager', 'webform'),
-    (Allow, 'group:manager', 'tojson'),
-    (Allow, 'group:manager', 'toxml'),
-    (Allow, 'group:manager', 'render'),
-    (Allow, 'group:manager', 'action'),
-
     (Allow, 'group:admin', ALL_PERMISSIONS), 
     (Deny, Everyone, ALL_PERMISSIONS),
 ]
@@ -169,16 +152,12 @@ configuration.groups = [
     GroupConf(id="group:admin",   name="group:admin"),
 ]
 
-class IItem(Interface):
-    """
-    """
-
-class IDatastorage(Interface):
+class IDataStorage(Interface):
     """
     """
     
 class DataStorage(ApplicationBase):
     """ the main cms application class """
-    implements(IDatastorage)
+    implements(IDataStorage)
     
     

@@ -739,12 +739,12 @@ class tWebapi_db(object):
         view = APIv1(o1, self.request)
 
         self.request.POST = {}
-        result = view.setItemForm()
+        result = view.updateForm()
         self.assert_(result["result"])
 
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"link": u"the new link", "comment": u"some new text", "create$": "1"}
-        result = view.setItemForm()
+        result = view.updateForm()
         self.assert_(result["result"])
         self.remove.append(result["result"])
         self.assert_(objs==len(r.GetObjsList(fields=["id"])))
@@ -761,12 +761,12 @@ class tWebapi_db(object):
 
         # wrong subset
         self.request.POST = {"subset": "unknown!", "pool_type": "bookmark", "link": u"the link", "comment": u"some text"}
-        self.assertRaises(ConfigurationError, view.setItemForm)
+        self.assertRaises(ConfigurationError, view.updateForm)
 
         # wrong action
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "unknown$": "1"}
-        result = view.setItemForm()
+        result = view.updateForm()
         self.assert_(result["result"])
         self.remove.append(result["result"])
         self.assert_(objs==len(r.GetObjsList(fields=["id"])))

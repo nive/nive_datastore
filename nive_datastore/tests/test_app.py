@@ -5,7 +5,7 @@ import unittest
 
 from nive.security import User
 from nive.definitions import ContainmentError
-from nive_datastore.app import DataStorage, IItem, IDatastorage
+from nive_datastore.app import DataStorage, IDataStorage
 from nive_datastore.tests import db_app
 from nive_datastore.tests import __local
 from nive_datastore.tests.__local import DB_CONF, MYSQL_CONF
@@ -70,8 +70,8 @@ class AppTest_db(object):
 
 
     def test_interfaces(self):
-        self.assertFalse(IItem.providedBy(123))
-        self.assertFalse(IDatastorage.providedBy(123))
+        self.assertFalse(IDataStorage.providedBy(123))
+        self.assert_(IDataStorage.providedBy(DataStorage(None)))
         
         
     def test_app(self):

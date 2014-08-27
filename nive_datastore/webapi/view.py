@@ -1,3 +1,6 @@
+# Copyright 2012-2014 Arndt Droullier, Nive GmbH. All rights reserved.
+# Released under GPL3. See license.txt
+
 import time
 import logging
 import json
@@ -5,33 +8,16 @@ import json
 from pyramid.httpexceptions import HTTPForbidden
 from pyramid.security import has_permission
 
-from nive_datastore.i18n import _
 from nive.definitions import ViewModuleConf, ViewConf, Conf
 from nive.definitions import IObject
 from nive.workflow import WorkflowNotAllowed
 from nive.views import BaseView
 from nive.forms import Form, ObjectForm
+from nive.security import Allow
 
+from nive_datastore.i18n import _
 
 # view module definition ------------------------------------------------------------------
-
-#@nive_module
-container_views = ViewModuleConf(
-    id = "DatastoreAPIv1-Container",
-    name = _(u"Data storage container api"),
-    containment = "nive_datastore.app.DataStorage",
-    view = "nive_datastore.webapi.view.APIv1",
-    context = "nive.definitions.IContainer",
-    views = (
-        # container/root
-        ViewConf(name="getItem",   attr="getItem",   permission="read",   renderer="json", context="nive.definitions.IContainer"),
-        ViewConf(name="newItem",   attr="newItem",   permission="add",    renderer="json", context="nive.definitions.IContainer"),
-        ViewConf(name="setItem",   attr="setItem",   permission="update", renderer="json", context="nive.definitions.IContainer"),
-        ViewConf(name="deleteItem",attr="deleteItem",permission="delete", renderer="json", context="nive.definitions.IContainer"),
-        ViewConf(name="listItems", attr="listItems", permission="search", renderer="json", context="nive.definitions.IContainer"),
-        ViewConf(name="searchItems",attr="searchItems",permission="search",renderer="json",context="nive.definitions.IContainer")
-    )
-)
 
 #@nive_module
 item_views = ViewModuleConf(
@@ -41,18 +27,65 @@ item_views = ViewModuleConf(
     view = "nive_datastore.webapi.view.APIv1",
     context = "nive.definitions.IObject",
     views = (
-        # item
-        ViewConf(name="",        attr="getContext",  permission="read",   renderer="json"),
-        ViewConf(name="update",  attr="setContext",  permission="update", renderer="json"),
+        # read
+        ViewConf(name="",            attr="getContext",  permission="api-read",       renderer="json"),
+        # update
+        ViewConf(name="update",      attr="setContext",  permission="api-update",     renderer="json"),
         # rendering
-        ViewConf(name="toJson",  attr="toJson",  permission="tojson",  renderer="json"),
-        ViewConf(name="render",  attr="render",  permission="render"),
+        ViewConf(name="toJson",      attr="toJson",      permission="api-tojson",     renderer="json"),
+        ViewConf(name="render",      attr="render",      permission="api-render"),
         # forms
-        ViewConf(name="newItemForm",    attr="newItemForm",    permission="addform", renderer="json"),
-        ViewConf(name="setItemForm",    attr="setItemForm",    permission="updateform", renderer="json"),
+        ViewConf(name="updateForm",  attr="updateForm",  permission="api-updateform", renderer="json"),
         # workflow
-        ViewConf(name="action", attr="action",   permission="action",  renderer="json"),
-        ViewConf(name="state",  attr="state",    permission="state",   renderer="json"),
+        ViewConf(name="action",      attr="action",      permission="api-action",     renderer="json"),
+        ViewConf(name="state",       attr="state",       permission="api-state",      renderer="json"),
+    ),
+    acl = (
+        (Allow, "group:reader",  "api-read"),
+        (Allow, "group:reader",  "api-tojson"),
+        (Allow, "group:reader",  "api-render"),
+
+        (Allow, "group:manager", "api-read"),
+        (Allow, "group:manager", "api-update"), 
+        (Allow, "group:manager", "api-tojson"),
+        (Allow, "group:manager", "api-render"),
+        (Allow, "group:manager", "api-updateform"),
+        (Allow, "group:manager", "api-action"),
+        (Allow, "group:manager", "api-state"),
+    )
+)
+
+#@nive_module
+container_views = ViewModuleConf(
+    id = "DatastoreAPIv1-Container",
+    name = _(u"Data storage container api"),
+    containment = "nive_datastore.app.DataStorage",
+    view = "nive_datastore.webapi.view.APIv1",
+    context = "nive.definitions.IContainer",
+    views = (
+        # list and search
+        ViewConf(name="listItems",  attr="listItems",  permission="api-search", renderer="json"),
+        ViewConf(name="searchItems",attr="searchItems",permission="api-search", renderer="json"),
+        # read contained item
+        ViewConf(name="getItem",    attr="getItem",    permission="api-read",   renderer="json"),
+        # add and update contained item
+        ViewConf(name="newItem",    attr="newItem",    permission="api-add",    renderer="json"),
+        ViewConf(name="setItem",    attr="setItem",    permission="api-update", renderer="json"),
+        # forms
+        ViewConf(name="newItemForm",attr="newItemForm",permission="api-addform",renderer="json"),
+        # delete
+        ViewConf(name="deleteItem", attr="deleteItem", permission="api-delete", renderer="json"),
+    ),
+    acl = (
+        (Allow, "group:reader", "api-search"),
+        (Allow, "group:reader", "api-read"),
+    
+        (Allow, "group:manager", "api-search"),
+        (Allow, "group:manager", "api-read"),
+        (Allow, "group:manager", "api-add"),
+        (Allow, "group:manager", "api-update"),
+        (Allow, "group:manager", "api-addform"),
+        (Allow, "group:manager", "api-delete"), 
     )
 )
 
@@ -698,7 +731,7 @@ class APIv1(BaseView):
         return {u"result": result, u"content": data, u"head": head}
         
 
-    def setItemForm(self):
+    def updateForm(self):
         """
         Renders and executes a web form based on the items configuration values. 
         Form setup requires `subset` passed in the request. If subset is not 
