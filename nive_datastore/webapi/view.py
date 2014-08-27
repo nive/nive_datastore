@@ -9,11 +9,13 @@ from pyramid.httpexceptions import HTTPForbidden
 from pyramid.security import has_permission
 
 from nive.definitions import ViewModuleConf, ViewConf, Conf
-from nive.definitions import IObject
+from nive.definitions import IObject, IContainer
 from nive.workflow import WorkflowNotAllowed
 from nive.views import BaseView
 from nive.forms import Form, ObjectForm
 from nive.security import Allow
+from nive.helper import JsonDataEncoder
+from nive.helper import ResolveName
 
 from nive_datastore.i18n import _
 
@@ -23,7 +25,7 @@ from nive_datastore.i18n import _
 item_views = ViewModuleConf(
     id = "DatastoreAPIv1-Item",
     name = _(u"Data storage item api"),
-    containment = "nive_datastore.app.DataStorage",
+    containment = "nive_datastore.app.IDataStorage",
     view = "nive_datastore.webapi.view.APIv1",
     context = "nive.definitions.IObject",
     views = (
@@ -32,7 +34,7 @@ item_views = ViewModuleConf(
         # update
         ViewConf(name="update",      attr="setContext",  permission="api-update",     renderer="json"),
         # rendering
-        ViewConf(name="toJson",      attr="toJson",      permission="api-tojson",     renderer="json"),
+        ViewConf(name="subtree",     attr="subtree",     permission="api-subtree"),
         ViewConf(name="render",      attr="render",      permission="api-render"),
         # forms
         ViewConf(name="updateForm",  attr="updateForm",  permission="api-updateform", renderer="json"),
@@ -42,16 +44,16 @@ item_views = ViewModuleConf(
     ),
     acl = (
         (Allow, "group:reader",  "api-read"),
-        (Allow, "group:reader",  "api-tojson"),
+        (Allow, "group:reader",  "api-subtree"),
         (Allow, "group:reader",  "api-render"),
 
-        (Allow, "group:manager", "api-read"),
-        (Allow, "group:manager", "api-update"), 
-        (Allow, "group:manager", "api-tojson"),
-        (Allow, "group:manager", "api-render"),
-        (Allow, "group:manager", "api-updateform"),
-        (Allow, "group:manager", "api-action"),
-        (Allow, "group:manager", "api-state"),
+        (Allow, "group:editor", "api-read"),
+        (Allow, "group:editor", "api-update"), 
+        (Allow, "group:editor", "api-subtree"),
+        (Allow, "group:editor", "api-render"),
+        (Allow, "group:editor", "api-updateform"),
+        (Allow, "group:editor", "api-action"),
+        (Allow, "group:editor", "api-state"),
     )
 )
 
@@ -59,7 +61,7 @@ item_views = ViewModuleConf(
 container_views = ViewModuleConf(
     id = "DatastoreAPIv1-Container",
     name = _(u"Data storage container api"),
-    containment = "nive_datastore.app.DataStorage",
+    containment = "nive_datastore.app.IDataStorage",
     view = "nive_datastore.webapi.view.APIv1",
     context = "nive.definitions.IContainer",
     views = (
@@ -68,6 +70,9 @@ container_views = ViewModuleConf(
         ViewConf(name="searchItems",attr="searchItems",permission="api-search", renderer="json"),
         # read contained item
         ViewConf(name="getItem",    attr="getItem",    permission="api-read",   renderer="json"),
+        # rendering
+        ViewConf(name="subtree",    attr="subtree",    permission="api-subtree"),
+        ViewConf(name="render",     attr="render",     permission="api-render"),
         # add and update contained item
         ViewConf(name="newItem",    attr="newItem",    permission="api-add",    renderer="json"),
         ViewConf(name="setItem",    attr="setItem",    permission="api-update", renderer="json"),
@@ -80,12 +85,12 @@ container_views = ViewModuleConf(
         (Allow, "group:reader", "api-search"),
         (Allow, "group:reader", "api-read"),
     
-        (Allow, "group:manager", "api-search"),
-        (Allow, "group:manager", "api-read"),
-        (Allow, "group:manager", "api-add"),
-        (Allow, "group:manager", "api-update"),
-        (Allow, "group:manager", "api-addform"),
-        (Allow, "group:manager", "api-delete"), 
+        (Allow, "group:editor", "api-search"),
+        (Allow, "group:editor", "api-read"),
+        (Allow, "group:editor", "api-add"),
+        (Allow, "group:editor", "api-update"),
+        (Allow, "group:editor", "api-addform"),
+        (Allow, "group:editor", "api-delete"), 
     )
 )
 
@@ -391,7 +396,7 @@ class APIv1(BaseView):
     def listItems(self):
         """
         Returns a list of batched items for a single or all types stored in the current container. 
-        The result only includes the items ids. For a complete list of values use `tojson` or `searchItems`.
+        The result only includes the items ids. For a complete list of values use `subtree` or `searchItems`.
         
         Request parameter:
         
@@ -477,7 +482,7 @@ class APIv1(BaseView):
         response = self.request.response
         
         if not profile:
-            profiles = self.context.app.configuration.get("profiles")
+            profiles = self.context.app.configuration.get("search")
             if not profiles:
                 response.status = u"400 No search profiles found"
                 return {"error": "No search profiles found", "items":[]}
@@ -594,64 +599,120 @@ class APIv1(BaseView):
 
     # tree renderer ----------------------------------------------------------------------------------
 
-    def _renderDict(self):
-        subtree = self.GetFormValue("subtree") in ("true","1",1,True)
-        item = self.context
-        if item.IsRoot() and not subtree:
-            # root and no subtree
-            return {}
-        
+    def _renderDict(self, context, profile):
         # cache field ids and types
         fields = {}
-        metafields = [m.id for m in self.context.app.GetAllMetaFlds(False)]
-        for conf in self.context.app.GetAllObjectConfs():
-            render = conf.get("render")
+        for conf in context.app.GetAllObjectConfs():
+            if conf.id in profile.fields:
+                # custom list of fields in profile for type 
+                fields[conf.id] = profile.fields[conf.id]
+                continue
+            # use type default
+            render = conf.get("toJson")
             if not render:
                 continue
-            elif render==1:
-                fields[conf.id] = metafields + [m.id for m in conf.data]
-            else:
-                fields[conf.id] = render
-        types = fields.keys()
-            
-        def itemValues(item, fields):
+            fields[conf.id] = render
+        
+        # prepare parameter
+        parameter = {}
+        parameter.update(profile.parameter)
+        if not "pool_type" in parameter:
+            parameter["pool_type"] = fields.keys()
+        
+        # prepare types to descent in tree structure
+        temp = profile.descent
+        descenttypes = []
+        for t in temp:
+            resolved = ResolveName(t)
+            if resolved:
+                descenttypes.append(resolved)
+            elif t in parameter["pool_type"]:
+                descenttypes.append(t)
+        operators={"pool_type":"IN"}
+        if profile.get("operators"):
+            operators.update(profile.operators)
+        
+        def itemValues(item):
             iv = {}
             if item.IsRoot():
                 return iv
-            metadata = fields[item.GetTypeID()]
-            for field in metadata:
+            name = item.GetTypeID()
+            if not name in fields:
+                return iv
+            for field in fields[item.GetTypeID()]:
                 iv[field] = item.GetFld(field)
             return iv
         
-        def itemSubtree(item, fields, types):
-            current = itemValues(item, fields)
-            current["items"] = []
-            items = item.GetObjs(parameter={"pool_type":types}, operators={"pool_type":"IN"})
-            for i in items:
-                current["items"].append(itemSubtree(i, fields, types))
+        _c_descent = [[],[]]
+        def descent(item):
+            # cache values: first list = descent, second list = do not descent
+            t = item.GetTypeID()
+            if t in _c_descent[0]:
+                return True
+            if t in _c_descent[1]:
+                return False
+            
+            for t in descenttypes:
+                if isinstance(t, basestring):
+                    if item.GetTypeID()==t:
+                        if not t in _c_descent[0]:
+                            _c_descent[0].append(t)
+                        return True
+                else:
+                    if t.providedBy(item):
+                        if not t in _c_descent[0]:
+                            _c_descent[0].append(item.GetTypeID())
+                        return True
+            if not t in _c_descent[1]:
+                _c_descent[1].append(item.GetTypeID())
+            return False
+            
+        def itemSubtree(item, includeSubtree=False):
+            current = itemValues(item)
+            if (includeSubtree or descent(item)) and IContainer.providedBy(item):
+                current["items"] = []
+                items = item.GetObjs(parameter=parameter, operators=operators)
+                for i in items:
+                    current["items"].append(itemSubtree(i))
             return current
         
-        if not subtree:
-            return itemValues(self.context, fields)
-        return itemSubtree(self.context, fields, types)
+        return itemSubtree(context, includeSubtree=True)
         
     
-    def renderJson(self):
+    def subtree(self, profile=None):
         """
         Returns complex results like parts of a subtree including several levels. Contained items
-        can be accessed through `items` in the result. `renderJson` uses the items configuration
+        can be accessed through `items` in the result. `subtree` uses the items configuration
         `render` option to determine the result values rendered in a json document.
         If `render` is None the item will not be rendered at all.
         
         Parameter:
 
-        - subtree: true or false. Includes contained levels if true
+        - profile: name of the subtree profile to use for subtree rendering
         
         returns json document
         """
-        values = self._renderDict()
-        return values
+        if not profile:
+            profiles = self.context.app.configuration.get("subtree")
+            if not profiles:
+                response.status = u"400 No subtree profile found"
+                return {"error": "No subtree profile found"}
 
+            profilename = self.GetFormValue("profile") or self.context.app.configuration.get("defaultSubtree")
+            if not profilename:
+                response.status = u"400 Empty subtree profile name"
+                return {"error": "Empty subtree profile name"}
+            profile = profiles.get(profilename)
+            if not profile:
+                response.status = u"400 Unknown profile"
+                return {"error": "Unknown profile"}
+        
+        if isinstance(profile, dict):
+            profile = Conf(**profile)
+
+        values = self._renderDict(self.context, profile)
+        data = JsonDataEncoder().encode(values)
+        return self.SendResponse(data, mime="application/json", raiseException=False)
         
     def renderTmpl(self, template=None):
         """

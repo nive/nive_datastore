@@ -639,11 +639,11 @@ class tWebapi_db(object):
         create_track(o1, user)
         create_track(o3, user)
 
-        values = view.renderJson()
+        values = view.toJson()
         self.assert_(values=={})
 
         self.request.POST = {"subtree": "1"}
-        values = view.renderJson()
+        values = view.toJson()
         self.assert_(values!={})
         self.assert_(len(values["items"])==2)
         self.assert_(len(values["items"][0]["items"])==1)
@@ -652,7 +652,7 @@ class tWebapi_db(object):
                                             
         view = APIv1(o1, self.request)
         self.request.POST = {"subtree": "0"}
-        values = view.renderJson()
+        values = view.toJson()
         self.assert_(values!={})
         self.assert_(values.get("items")==None)
         

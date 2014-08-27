@@ -23,17 +23,24 @@ Database connection and basic datastore application configuration
                   title = "My Data Storage",
                   maxStoreItems = 20,
                   maxBatchNumber = 100,
-                  profiles = {"all":  {"type": "bookmark", "container": False,
-                                       "fields": ["id", "link", "comment", "pool_changedby"],
-                                       "parameter": {"share": True}
-                                       }
-                              },
-                  defaultProfile = "all"
+                  search = {"all": {  
+                               "type": "bookmark", 
+                               "container": False,
+                               "fields": ["id", "link", "comment", "pool_changedby"],
+                               "parameter": {"share": True}
+                  }},
+                  defaultSearch = "all",
+                  subtree = {"all": {
+                                 "descent": (IContainer,), # item types or interfaces to descent into subtree
+                                 "fields": {},             # if empty uses type definition toJson defaults
+                                 "parameter": {"pool_state": 1}
+                  }},
+                  defaultSubtree = "all"
     )
     dbConfiguration = DatabaseConf(
-                       fileRoot="/var/opt/datastore",
-                       context=u"Sqlite3",
-                       dbName="/var/opt/datastore/items.db"
+        fileRoot="/var/opt/datastore",
+        context=u"Sqlite3",
+        dbName="/var/opt/datastore/items.db"
     )
     app.modules.append(dbConfiguration)
 
@@ -58,7 +65,7 @@ A simple example. Stores a bookmark and comment: ::
           "newItem": {"fields": ("link", "share", "comment") }, 
           "setItem": {"fields": ("link", "share", "comment") }
         },
-        render = ("link", "share", "comment", "id", "pool_create", "pool_change"),
+        toJson = ("link", "share", "comment", "id", "pool_create", "pool_change"),
         template = "bookmark.pt",
     )
     app.modules.append(bookmark)  # app is the AppConf() defined in the previous example 
