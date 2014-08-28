@@ -135,8 +135,7 @@ configuration.modules = [
     # root 
     "nive_datastore.root",
     # web api (view layer)
-    "nive_datastore.webapi.view.container_views",
-    "nive_datastore.webapi.view.item_views",
+    "nive_datastore.webapi",
     #extensions
     #"nive.extensions.localgroups",
     # tools
@@ -159,6 +158,8 @@ configuration.groups = [
     GroupConf(id="group:author",  name="group:manager"),
     GroupConf(id="group:admin",   name="group:admin"),
 ]
+
+
 
 class IDataStorage(Interface):
     """
