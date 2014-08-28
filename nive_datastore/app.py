@@ -31,6 +31,7 @@ Database connection and basic datastore application configuration
                   }},
                   defaultSearch = "all",
                   subtree = {"all": {
+                                 "levels": 0,              # the number of levels to include, 0=include all
                                  "descent": (IContainer,), # item types or interfaces to descent into subtree
                                  "fields": {},             # if empty uses type definition toJson defaults
                                  "parameter": {"pool_state": 1}

@@ -599,7 +599,7 @@ class APIv1(BaseView):
 
     # tree renderer ----------------------------------------------------------------------------------
 
-    def _renderDict(self, context, profile):
+    def _renderTree(self, context, profile):
         # cache field ids and types
         fields = {}
         for conf in context.app.GetAllObjectConfs():
@@ -632,6 +632,11 @@ class APIv1(BaseView):
         operators={"pool_type":"IN"}
         if profile.get("operators"):
             operators.update(profile.operators)
+            
+        # lookup levels
+        levels = profile.get("levels")
+        if levels == None:
+            levels = 10000
         
         def itemValues(item):
             iv = {}
@@ -668,16 +673,17 @@ class APIv1(BaseView):
                 _c_descent[1].append(item.GetTypeID())
             return False
             
-        def itemSubtree(item, includeSubtree=False):
+        def itemSubtree(item, lev, includeSubtree=False):
             current = itemValues(item)
-            if (includeSubtree or descent(item)) and IContainer.providedBy(item):
+            if (includeSubtree or descent(item)) and lev>0 and IContainer.providedBy(item):
+                lev = lev - 1
                 current["items"] = []
                 items = item.GetObjs(parameter=parameter, operators=operators)
                 for i in items:
-                    current["items"].append(itemSubtree(i))
+                    current["items"].append(itemSubtree(i), lev)
             return current
         
-        return itemSubtree(context, includeSubtree=True)
+        return itemSubtree(context, levels, includeSubtree=True)
         
     
     def subtree(self, profile=None):
@@ -715,7 +721,7 @@ class APIv1(BaseView):
         if isinstance(profile, dict):
             profile = Conf(**profile)
 
-        values = self._renderDict(self.context, profile)
+        values = self._renderTree(self.context, profile)
         data = JsonDataEncoder().encode(values)
         return self.SendResponse(data, mime="application/json", raiseException=False)
         
