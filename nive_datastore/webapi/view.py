@@ -225,7 +225,7 @@ class APIv1(BaseView):
         items = self.GetFormValue("items")
         if not items:
             values = self.GetFormValues()
-            typename = values.get("type")
+            typename = values.get("type") or values.get("pool_type")
             if not typename:
                 response.status = u"400 No type given"
                 return {"error": "No type given", "result":[]}
@@ -251,9 +251,9 @@ class APIv1(BaseView):
 
         validated = []
         cnt = 1
-        defaulttype = self.GetFormValue("pool_type")
+        defaulttype = self.GetFormValue("type") or self.GetFormValue("pool_type")
         for values in items:
-            typename = values.get("pool_type") or defaulttype
+            typename = values.get("type") or values.get("pool_type") or defaulttype
             if not typename:
                 response.status = u"400 No type given"
                 return {"error": "No type given: Item "+str(cnt), "result":[]}
@@ -414,7 +414,7 @@ class APIv1(BaseView):
         user = self.User()
                 
         values = self.GetFormValues()
-        type = values.get("pool_type")
+        type = values.get("type") or values.get("pool_type")
 
         try:
             start = ExtractJSValue(values, u"start", 0, "int")
@@ -459,7 +459,7 @@ class APIv1(BaseView):
         configuration as (see `nive.search` for a full list of keyword options and 
         usage) ::
         
-          {"profilename": {"pool_type": "", "container": False,
+          {"profilename": {"type": "", "container": False,
                            "fields": [], "parameter": {}, "operators": {}}}
           
         If `type` is not empty this function uses `nive.search.SearchType`, if empty `nive.search.Search`.
@@ -514,7 +514,7 @@ class APIv1(BaseView):
             response.status = u"400 Invalid parameter"
             return {"error": "Invalid parameter: size", "items":[]}
         
-        type = profile.get("pool_type")
+        type = profile.get("type") or profile.get("pool_type")
 
         order = values.get("order",None)
         if order == u"<":
@@ -680,7 +680,7 @@ class APIv1(BaseView):
                 current["items"] = []
                 items = item.GetObjs(parameter=parameter, operators=operators)
                 for i in items:
-                    current["items"].append(itemSubtree(i), lev)
+                    current["items"].append(itemSubtree(i, lev))
             return current
         
         return itemSubtree(context, levels, includeSubtree=True)
@@ -778,7 +778,7 @@ class APIv1(BaseView):
         - content: rendered form html
         - head: required html head includes like js and css files
         """
-        typename = self.GetFormValue("pool_type")
+        typename = self.GetFormValue("type") or self.GetFormValue("pool_type")
         if not typename:
             return {u"result": False, u"content": u"", u"head": u"", u"message": u"No type given"}
         typeconf = self.context.app.GetObjectConf(typename)
