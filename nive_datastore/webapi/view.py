@@ -211,7 +211,7 @@ class APIv1(BaseView):
         
         Request parameter:
         
-        - pool_type: the new type to be created. Must be set for each item.
+        - type: the new type to be created. Must be set for each item.
         - <fields>: A single item can be passed as form values.
         - items (optional): One or multiple items to be stored. Multiple items have to be passed as 
           array. Maximum number of 20 items allowed.
@@ -225,7 +225,7 @@ class APIv1(BaseView):
         items = self.GetFormValue("items")
         if not items:
             values = self.GetFormValues()
-            typename = values.get("pool_type")
+            typename = values.get("type")
             if not typename:
                 response.status = u"400 No type given"
                 return {"error": "No type given", "result":[]}
