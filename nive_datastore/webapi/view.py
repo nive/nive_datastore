@@ -13,7 +13,7 @@ from nive.definitions import IObject, IContainer
 from nive.workflow import WorkflowNotAllowed
 from nive.views import BaseView
 from nive.forms import Form, ObjectForm
-from nive.security import Allow
+from nive.security import Allow, Everyone
 from nive.helper import JsonDataEncoder
 from nive.helper import ResolveName
 
@@ -637,7 +637,7 @@ class APIv1(BaseView):
         levels = profile.get("levels")
         if levels == None:
             levels = 10000
-        
+
         def itemValues(item):
             iv = {}
             if item.IsRoot():
@@ -674,6 +674,8 @@ class APIv1(BaseView):
             return False
             
         def itemSubtree(item, lev, includeSubtree=False):
+            if profile.get("secure",True) and not has_permission("api-subtree", item, self.request):
+                return {}
             current = itemValues(item)
             if (includeSubtree or descent(item)) and lev>0 and IContainer.providedBy(item):
                 lev = lev - 1
@@ -682,7 +684,7 @@ class APIv1(BaseView):
                 for i in items:
                     current["items"].append(itemSubtree(i, lev))
             return current
-        
+
         return itemSubtree(context, levels, includeSubtree=True)
         
     

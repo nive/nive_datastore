@@ -137,7 +137,6 @@ configuration.modules = [
     # web api (view layer)
     "nive_datastore.webapi",
     #extensions
-    #"nive.extensions.localgroups",
     # tools
     "nive.tools.dbStructureUpdater", "nive.tools.cmsstatistics",
     "nive.tools.exportJson", "nive.tools.dbSqlDump", "nive.tools.dbJsonDump", 
