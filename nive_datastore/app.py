@@ -154,6 +154,7 @@ configuration.acl = [
 
 configuration.groups = [
     GroupConf(id="group:reader",  name="group:reader"),
+    GroupConf(id="group:owner",   name="group:owner"),
     GroupConf(id="group:author",  name="group:manager"),
     GroupConf(id="group:admin",   name="group:admin"),
 ]

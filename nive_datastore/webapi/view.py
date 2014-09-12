@@ -4,6 +4,7 @@
 import time
 import logging
 import json
+import copy
 
 from pyramid.httpexceptions import HTTPForbidden
 from pyramid.security import has_permission
@@ -37,7 +38,7 @@ item_views = ViewModuleConf(
         ViewConf(name="subtree",     attr="subtree",     permission="api-subtree"),
         ViewConf(name="render",      attr="render",      permission="api-render"),
         # forms
-        ViewConf(name="updateForm",  attr="updateForm",  permission="api-updateform", renderer="json"),
+        ViewConf(name="updateForm",  attr="updateForm",  permission="api-updateform"),
         # workflow
         ViewConf(name="action",      attr="action",      permission="api-action",     renderer="json"),
         ViewConf(name="state",       attr="state",       permission="api-state",      renderer="json"),
@@ -77,7 +78,7 @@ container_views = ViewModuleConf(
         ViewConf(name="newItem",    attr="newItem",    permission="api-add",    renderer="json"),
         ViewConf(name="setItem",    attr="setItem",    permission="api-update", renderer="json"),
         # forms
-        ViewConf(name="newItemForm",attr="newItemForm",permission="api-addform",renderer="json"),
+        ViewConf(name="newItemForm",attr="newItemForm",permission="api-addform"),
         # delete
         ViewConf(name="deleteItem", attr="deleteItem", permission="api-delete", renderer="json"),
     ),
@@ -460,7 +461,7 @@ class APIv1(BaseView):
         usage) ::
         
           {"profilename": {"type": "", "container": False,
-                           "fields": [], "parameter": {}, "operators": {}}}
+                           "fields": [], "parameter": {}, "operators": {}}, "groups": []}
           
         If `type` is not empty this function uses `nive.search.SearchType`, if empty `nive.search.Search`.
         The data fields to be included in the result have to be assigned respectively. In other words
@@ -496,6 +497,14 @@ class APIv1(BaseView):
                 response.status = u"400 Unknown profile"
                 return {"error": "Unknown profile", "items":[]}
         
+        if profile.get("groups"):
+            grps = profile.get("groups")
+            user = self.User()
+            #TODO local groups
+            if not user or not user.InGroups(grps):
+                raise HTTPForbidden, "Profile not allowed"
+
+
         values = self.GetFormValues()
         try:
             start = ExtractJSValue(values, u"start", 0, "int")
@@ -505,7 +514,7 @@ class APIv1(BaseView):
             return {"error": "Invalid parameter: start", "items":[]}
         
         try:
-            size = ExtractJSValue(values, u"size", 20, "int")
+            size = ExtractJSValue(values, u"size", 50, "int")
             maxBatchNumber = self.context.app.configuration.get("maxBatchNumber") or DefaultMaxBatchNumber
             if size > maxBatchNumber:
                 size = maxBatchNumber
@@ -763,8 +772,8 @@ class APIv1(BaseView):
                     FieldConf(id="comment",  datatype="text", size=50000, default=u"",  name=u"Comment"),
                 ),
                 forms = {
-                    "newItem": {"fields": ("link", "share", "comment"), "ajax": True}, 
-                    "setItem": {"fields": ("link", "share", "comment"), "ajax": True}
+                    "newItem": {"fields": ("link", "share", "comment"), "ajax": True, assets: False},
+                    "setItem": {"fields": ("link", "share", "comment"), "ajax": True, assets: True}
                 },
                 render = ("id", "link", "comment", "pool_changedby", "pool_change"),
                 template = "nive_datastore.webapi.tests:bookmark.pt"
@@ -774,12 +783,15 @@ class APIv1(BaseView):
         
             {"fields": ("link", "share", "comment"), "ajax": True}        
         
-        The function returns json including rendered form html and result state: 
+        The function returns rendered form html and result state as X-Result header:
 
-        - result: true or false
-        - content: rendered form html
-        - head: required html head includes like js and css files
+        - X-Result: true or false
+        - content: required html head includes like js and css files and rendered form html
+
+        To get required assets in a seperate call use `?assets=only` as query parameter. This will
+        return the required css and js assets for the specific form only.
         """
+        headeronly = self.GetFormValue("assets")=="only"
         typename = self.GetFormValue("type") or self.GetFormValue("pool_type")
         if not typename:
             return {u"result": False, u"content": u"", u"head": u"", u"message": u"No type given"}
@@ -797,13 +809,21 @@ class APIv1(BaseView):
             form.subsets[subset] = subsetdef
 
         form.Setup(subset=subset, addTypeField=True)
-        # process and render the form.
         form.use_ajax = True
+        if headeronly:
+            return self.SendResponse(data=form.HTMLHead(ignore=()))
+        # process and render the form.
         result, data, action = form.Process(pool_type=typename)
-        head = form.HTMLHead()
         if IObject.providedBy(result):
             result = result.id
-        return {u"result": result, u"content": data, u"head": head}
+        head = u""
+        if subsetdef.get("assets"):
+            assets = subsetdef.get("assets")
+            if not isinstance(assets, (tuple, list)):
+                assets = ()
+            head = form.HTMLHead(ignore=assets)
+        return self.SendResponse(data=head+data, headers=(("XResult", str(result)),))
+        #return {u"result": result, u"content": data, u"head": head}
         
 
     def updateForm(self):
@@ -837,33 +857,44 @@ class APIv1(BaseView):
         
             {"fields": ("link", "share", "comment"), "ajax": True}        
         
-        The function returns json including rendered form html and result state: 
+        The function returns rendered form html and result state as X-Result header:
 
-        - result: true or false
-        - content: rendered form html
-        - head: required html head includes like js and css files
+        - X-Result: true or false
+        - content: required html head includes like js and css files and rendered form html
+
+        To get required assets in a seperate call use `?assets=only` as query parameter. This will
+        return the required css and js assets for the specific form only.
         """
+        headeronly = self.GetFormValue("assets")=="only"
         typeconf = self.context.configuration
         subset = self.GetFormValue("subset") or "newItem"
         if not subset:
-            return {u"result": False, u"content": u"", u"head": u"", u"message": u"No subset given"}
+            return self.SendResponse(data=u"No subset given", headers=(("XResult", "true"),))
         form = ItemForm(view=self, loadFromType=typeconf)
-        form.subsets = typeconf.forms
+        form.subsets = copy.deepcopy(typeconf.forms)
         subsetdef = form.subsets.get(subset)
         if subsetdef and not subsetdef.get("actions"):
             # add default new item actions
-            subsetdef = subsetdef.copy()
-            subsetdef.update(form.defaultNewItemAction)
+            #subsetdef = subsetdef.copy()
+            subsetdef.update(form.defaultSetItemAction)
             form.subsets[subset] = subsetdef
 
         form.Setup(subset=subset, addTypeField=True)
-        # process and render the form.
         form.use_ajax = True
+        if headeronly:
+            return self.SendResponse(data=form.HTMLHead(ignore=()))
+        # process and render the form.
         result, data, action = form.Process(pool_type=typeconf.id)
-        head = form.HTMLHead()
         if IObject.providedBy(result):
             result = result.id
-        return {u"result": result, u"content": data, u"head": head}
+        head = u""
+        if subsetdef.get("assets"):
+            assets = subsetdef.get("assets")
+            if not isinstance(assets, (tuple, list)):
+                assets = ()
+            head = form.HTMLHead(ignore=assets)
+        return self.SendResponse(data=head+data, headers=(("XResult", str(result)),))
+        #return {u"result": result, u"content": data, u"head": head}
 
 
     # workflow functions ------------------------------------------------------------
@@ -956,11 +987,11 @@ class ItemForm(ObjectForm):
     Supports sort form parameter *pepos*.
     """
     actions = [
-        Conf(id=u"default",    method="StartFormRequest",  name=u"Initialize", hidden=True,  css_class=u"",            html=u"", tag=u""),
-        Conf(id=u"create",     method="CreateObj",  name=u"Create",     hidden=False, css_class=u"btn btn-primary",  html=u"", tag=u""),
-        Conf(id=u"defaultEdit",method="StartObject",name=u"Initialize", hidden=True,  css_class=u"",            html=u"", tag=u""),
-        Conf(id=u"edit",       method="UpdateObj",  name=u"Save",       hidden=False, css_class=u"btn btn-primary",  html=u"", tag=u""),
-        Conf(id=u"cancel",     method="Cancel",     name=u"Cancel",     hidden=False, css_class=u"buttonCancel",html=u"", tag=u"")
+        Conf(id=u"default",    method="StartFormRequest", name=u"Initialize", hidden=True,  css_class=u"",            html=u"", tag=u""),
+        Conf(id=u"create",     method="CreateObj",        name=u"Create",     hidden=False, css_class=u"btn btn-primary",  html=u"", tag=u""),
+        Conf(id=u"defaultEdit",method="StartObject",      name=u"Initialize", hidden=True,  css_class=u"",            html=u"", tag=u""),
+        Conf(id=u"edit",       method="UpdateObj",        name=u"Save",       hidden=False, css_class=u"btn btn-primary",  html=u"", tag=u""),
+        Conf(id=u"cancel",     method="Cancel",           name=u"Cancel",     hidden=False, css_class=u"buttonCancel",html=u"", tag=u"")
     ]
     defaultNewItemAction = {"actions": [u"create"],  "defaultAction": "default"}
     defaultSetItemAction = {"actions": [u"edit"],    "defaultAction": "defaultEdit"}
