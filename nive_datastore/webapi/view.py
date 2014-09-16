@@ -481,7 +481,6 @@ class APIv1(BaseView):
         Returns json encoded result set: {"items":[items], "start":number, "size":number, "total":number}
         """
         response = self.request.response
-        
         if not profile:
             profiles = self.context.app.configuration.get("search")
             if not profiles:
