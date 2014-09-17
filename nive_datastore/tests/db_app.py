@@ -50,18 +50,21 @@ appconf = AppConf("nive_datastore.app",
                   {"pool_type": "bookmark", 
                    "container": False,
                    "fields": ["id", "link", "comment", "pool_changedby"],
-                   "parameter": {}},
+                   "parameter": {},
+                   "dynamic": {"size":10},
+                   "size": 10},
               "tracks":  
                   {"pool_type": "track", 
                    "container": True,
                    "fields": ["id", "link", "comment", "pool_changedby"],
+                   "dynamic": {"size":10},
                    "parameter": {}},
-              "all": 
+              "default":
                   {"container": False,
                    "fields": ["id", "pool_create", "pool_changedby"],
+                   "dynamic": {"size":10, "start": 1},
                    "parameter": {}},
     },
-    defaultSearch = "all"
 )
 appconf.modules.append(collection1)
 appconf.modules.append(collection2)

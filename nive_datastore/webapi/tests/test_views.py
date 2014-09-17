@@ -5,6 +5,7 @@ import unittest
 
 from nive.definitions import Conf, ConfigurationError
 from nive.security import User
+from nive.views import ExceptionalResponse
 from nive_datastore.webapi.view import *
 from nive_datastore.tests.db_app import *
 from nive_datastore.tests import __local
@@ -34,8 +35,8 @@ class tWebapi_db(object):
 
     def tearDown(self):
         user = User(u"test")
-        for r in self.remove:
-            self.root.Delete(r, user)
+        for r in self.root.GetObjsList(fields=["id"]):
+            self.root.Delete(r["id"], user)
         self.app.Close()
         testing.tearDown()
 
@@ -574,7 +575,7 @@ class tWebapi_db(object):
             "fields": ["pool_type"],
             "parameter": {"pool_changedby":"test"},
             "operators": {"pool_changedby":"="},
-            "groupby": "pool_type"
+            "advanced": {"groupby": "pool_type"}
         }
         result = view.searchItems(profile=profile)
         self.assert_(len(result["items"])==2)
@@ -697,14 +698,15 @@ class tWebapi_db(object):
 
         self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text"}
         result = view.newItemForm()
-        self.assert_(result["result"])
+        self.assert_(result.headers["X-Result"])
 
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "create$": "1"}
-        result = view.newItemForm()
-        self.assert_(result["result"])
-        self.remove.append(result["result"])
-        self.assert_(objs+1==len(r.GetObjsList(fields=["id"])))
+        try:
+            view.newItemForm()
+        except ExceptionalResponse, result:
+            self.assert_(result.headers["X-Result"])
+            self.assert_(objs+1==len(r.GetObjsList(fields=["id"])))
 
 
     def test_newformfailures(self):
@@ -722,7 +724,7 @@ class tWebapi_db(object):
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"link": u"the link", "comment": u"some text", "create$": "1"}
         result = view.newItemForm()
-        self.assertFalse(result["result"])
+        self.assertFalse(result.headers["X-Result"])
         self.assert_(objs==len(r.GetObjsList(fields=["id"])))
         
         # wrong subset
@@ -732,10 +734,12 @@ class tWebapi_db(object):
         # wrong action
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "unknown$": "1"}
-        result = view.newItemForm()
-        self.assert_(result["result"])
-        self.remove.append(result["result"])
-        self.assert_(objs==len(r.GetObjsList(fields=["id"])))
+        try:
+            result = view.newItemForm()
+            self.assert_(False)
+        except ExceptionalResponse, result:
+            self.assert_(result.headers["X-Result"])
+            self.assert_(objs==len(r.GetObjsList(fields=["id"])))
         
         
     def test_setform(self):
@@ -749,14 +753,16 @@ class tWebapi_db(object):
 
         self.request.POST = {}
         result = view.updateForm()
-        self.assert_(result["result"])
+        self.assert_(result.headers["X-Result"])
 
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"link": u"the new link", "comment": u"some new text", "create$": "1"}
-        result = view.updateForm()
-        self.assert_(result["result"])
-        self.remove.append(result["result"])
-        self.assert_(objs==len(r.GetObjsList(fields=["id"])))
+        try:
+            result = view.updateForm()
+            self.assert_(False)
+        except ExceptionalResponse, result:
+            self.assert_(result.headers["X-Result"])
+            self.assert_(objs==len(r.GetObjsList(fields=["id"])))
 
 
     def test_newformfailures(self):
@@ -776,8 +782,7 @@ class tWebapi_db(object):
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "unknown$": "1"}
         result = view.updateForm()
-        self.assert_(result["result"])
-        self.remove.append(result["result"])
+        self.assert_(result.headers["X-Result"])
         self.assert_(objs==len(r.GetObjsList(fields=["id"])))
         
         

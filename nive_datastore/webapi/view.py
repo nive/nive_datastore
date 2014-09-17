@@ -394,183 +394,6 @@ class APIv1(BaseView):
         return {"result": deleted, "error": error}
             
 
-    def listItems(self):
-        """
-        Returns a list of batched items for a single or all types stored in the current container. 
-        The result only includes the items ids. For a complete list of values use `subtree` or `searchItems`.
-        
-        Request parameter:
-        
-        - type (optional): the items type identifier 
-        - sort (optional): sort field. a meta field or if type is not empty, one of the types fields. 
-        - order (optional): '<','>'. order the result list based on values ascending '<' or descending '>'
-        - size (optional): number of batched items. maximum is 100.
-        - start (optional): start number of batched result sets.
-
-        Returns json encoded result set: {"items":[item ids], "start":number}
-        """
-        response = self.request.response
-
-        # process owner mode
-        user = self.User()
-                
-        values = self.GetFormValues()
-        type = values.get("type") or values.get("pool_type")
-
-        try:
-            start = ExtractJSValue(values, u"start", 0, "int")
-        except ValueError:
-            # set http response code (invalid request)
-            response.status = u"400 Invalid parameter"
-            return {"error": "Invalid parameter: start", "items": []}
-        
-        try:
-            size = ExtractJSValue(values, u"size", 20, "int")
-            maxBatchNumber = self.context.app.configuration.get("maxBatchNumber") or DefaultMaxBatchNumber
-            if size > maxBatchNumber:
-                size = maxBatchNumber
-        except ValueError:
-            # set http response code (invalid request)
-            response.status = u"400 Invalid parameter"
-            return {"error": "Invalid parameter: size", "items": []}
-
-        order = values.get("order",None)
-        if order == u"<":
-            ascending = 1
-        else:
-            ascending = 0
-
-        sort = values.get("sort",None)
-        if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds()]:
-            if type:
-                if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(type)]:
-                    sort = None
-        
-        parameter = {"pool_unitref": self.context.id}
-        result = self.context.dataroot.Select(type, parameter=parameter, fields=["id"], start=start, max=size, ascending=ascending, sort=sort)
-        ids = [v[0] for v in result]
-        result = {"items": ids, "start": start}
-        return result
-
-    
-    def searchItems(self, profile=None):
-        """
-        Returns a list of batched items for a single or multiple keys. 
-        Search profiles can be preconfigured and stored in the datastore application 
-        configuration as (see `nive.search` for a full list of keyword options and 
-        usage) ::
-        
-          {"profilename": {"type": "", "container": False,
-                           "fields": [], "parameter": {}, "operators": {}}, "groups": []}
-          
-        If `type` is not empty this function uses `nive.search.SearchType`, if empty `nive.search.Search`.
-        The data fields to be included in the result have to be assigned respectively. In other words
-        if `type` is given the types data fields can be included in the result otherwise not.
-        
-        `container` determines whether to search in the current container or search all items in the tree.
-        
-        Request parameter:
-        
-        - profile: defines the search parameter profile and result fields. profiles are loaded 
-          from the application configuration. 
-        - sort (optional): sort field. a meta field or if type is not empty, one of the types fields.
-        - order (optional): '<','>'. order the result list based on values ascending '<' or descending '>'
-        - size (optional): number of batched items. 
-        - start (optional): start number of batched result sets.
-
-        Returns json encoded result set: {"items":[items], "start":number, "size":number, "total":number}
-        """
-        response = self.request.response
-        if not profile:
-            profiles = self.context.app.configuration.get("search")
-            if not profiles:
-                response.status = u"400 No search profiles found"
-                return {"error": "No search profiles found", "items":[]}
-
-            profilename = self.GetFormValue("profile") or self.context.app.configuration.get("defaultSearch")
-            if not profilename:
-                response.status = u"400 Empty search profile name"
-                return {"error": "Empty search profile name", "items":[]}
-            profile = profiles.get(profilename)
-            if not profile:
-                response.status = u"400 Unknown profile"
-                return {"error": "Unknown profile", "items":[]}
-        
-        if profile.get("groups"):
-            grps = profile.get("groups")
-            user = self.User()
-            #TODO local groups
-            if not user or not user.InGroups(grps):
-                raise HTTPForbidden, "Profile not allowed"
-
-
-        values = self.GetFormValues()
-        try:
-            start = ExtractJSValue(values, u"start", 0, "int")
-        except ValueError:
-            # set http response code (invalid request)
-            response.status = u"400 Invalid parameter"
-            return {"error": "Invalid parameter: start", "items":[]}
-        
-        try:
-            size = ExtractJSValue(values, u"size", 50, "int")
-            maxBatchNumber = self.context.app.configuration.get("maxBatchNumber") or DefaultMaxBatchNumber
-            if size > maxBatchNumber:
-                size = maxBatchNumber
-        except ValueError:
-            # set http response code (invalid request)
-            response.status = u"400 Invalid parameter"
-            return {"error": "Invalid parameter: size", "items":[]}
-        
-        type = profile.get("type") or profile.get("pool_type")
-
-        order = values.get("order",None)
-        if order == u"<":
-            ascending = 1
-        elif order == u">":
-            ascending = 0
-        else:
-            ascending = None
-
-        sort = values.get("sort",None)
-        if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds()]:
-            if type:
-                if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(type)]:
-                    sort = None
-        
-        if profile.get("container"):
-            parameter = {"pool_unitref": self.context.id}
-        else:
-            parameter = {}
-        parameter.update(profile.get("parameter",{}))
-        operators = profile.get("operators")
-        fields = profile.get("fields")
-        kws = {}
-        for key,value in profile.items():
-            if key in ("pool_type", "parameter", "operators", "fields", "container"):
-                continue
-            kws[key] = value
-        
-        if start!=None and start!=0:
-            # Search Functions use 0 based index, searchItems 1 based index
-            kws["start"] = start-1
-        if size!=None:
-            kws["max"] = size
-        if ascending!=None:
-            kws["ascending"] = ascending
-        if sort!=None:
-            kws["sort"] = sort
-        if type:
-            result = self.context.dataroot.SearchType(type, parameter=parameter, fields=fields, operators=operators, **kws)
-        else:
-            result = self.context.dataroot.Search(parameter=parameter, fields=fields, operators=operators, **kws)
-        values = {"items": result["items"], 
-                  "start": result["start"]+1, 
-                  "size": result["count"], 
-                  "total": result["total"]}
-        return values
-
-
     # called with item as context ------------------------------------------------------------
 
     def getContext(self):
@@ -605,7 +428,376 @@ class APIv1(BaseView):
         return {"result": result}
     
 
+    # list and search ----------------------------------------------------------------------------------
+
+    def listItems(self):
+        """
+        Returns a list of batched items for a single or all types stored in the current container.
+        The result only includes the items ids. For a complete list of values use `subtree` or `searchItems`.
+
+        Request parameter:
+
+        - type (optional): the items type identifier
+        - sort (optional): sort field. a meta field or if type is not empty, one of the types fields.
+        - order (optional): '<','>'. order the result list based on values ascending '<' or descending '>'
+        - size (optional): number of batched items. maximum is 100.
+        - start (optional): start number of batched result sets.
+
+        Returns json encoded result set: {"items":[item ids], "start":number}
+        """
+        response = self.request.response
+
+        # process owner mode
+        user = self.User()
+
+        values = self.GetFormValues()
+        type = values.get("type") or values.get("pool_type")
+
+        try:
+            start = ExtractJSValue(values, u"start", 0, "int")
+        except ValueError:
+            # set http response code (invalid request)
+            response.status = u"400 Invalid parameter"
+            return {"error": "Invalid parameter: start", "items": []}
+
+        try:
+            size = ExtractJSValue(values, u"size", 20, "int")
+            maxBatchNumber = self.context.app.configuration.get("maxBatchNumber") or DefaultMaxBatchNumber
+            if size > maxBatchNumber:
+                size = maxBatchNumber
+        except ValueError:
+            # set http response code (invalid request)
+            response.status = u"400 Invalid parameter"
+            return {"error": "Invalid parameter: size", "items": []}
+
+        order = values.get("order",None)
+        if order == u"<":
+            ascending = 1
+        else:
+            ascending = 0
+
+        sort = values.get("sort",None)
+        if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds()]:
+            if type:
+                if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(type)]:
+                    sort = None
+
+        parameter = {"pool_unitref": self.context.id}
+        result = self.context.dataroot.Select(type, parameter=parameter, fields=["id"], start=start, max=size, ascending=ascending, sort=sort)
+        ids = [v[0] for v in result]
+        result = {"items": ids, "start": start}
+        return result
+
+
+    def searchItems(self, profile=None):
+        """
+        Returns a list of batched items for a single or multiple keys.
+        Search profiles can be preconfigured and stored in the datastore application
+        configuration as (see `nive.search` for a full list of keyword options and
+        usage) ::
+
+            # search profile values
+            {
+                "type": "profile",
+                "container": True,
+                "fields": ["id", "name", "slogan"],
+                "parameter": {"public": True, "pool_state": True},
+                "dynamic": {"start": 0},
+                "operators": {},
+                "sort": "pool_change",
+                "order": "<",
+                "size": 30,
+                "start": 0,
+                "advanced": {}
+            }
+
+        The system provides two options to configure search profiles. The first one uses the application configuration ::
+
+            appconf.search = {
+                # the default profile if no name is given
+                "default": {
+                    # profile values go here
+                },
+                "extended": {
+                    # profile values go here
+                },
+            }
+
+        To use the `extended` profile pass the profiles name as query parameter
+        e.g. `http://myapp.com/storage/searchItems?profile=extended`. This way searchItems will always return json.
+
+        The second option is to add a custom view based on `searchItems`. This way you can add a custom renderer,
+        view name and permissions::
+
+            ViewConf(
+                name="list",
+                attr="searchItems",
+                context="nive_datastore.root.root",
+                permission="view",
+                renderer="myapp:templates/list.pt",
+                search={
+                    # profile values go here
+                }
+            )
+
+        See `application configuration` how to include the view.
+
+        Options:
+
+        If ``type`` is not empty this function uses `nive.search.SearchType`, if empty `nive.search.Search`.
+        The data fields to be included in the result have to be assigned respectively. In other words
+        if `type` is given the types data fields can be included in the result, otherwise not.
+
+        ``container`` determines whether to search in the current container or search all items in the tree.
+
+        ``fields`` a list of data fields to be included in the result set. See `nive.search`.
+
+        ``parameter`` is a dictionary of fixed query parameters used in the select statement. These values cannot
+        be changed through request form values. See `dynamic` for search parameter that need to updated through
+        the request.
+
+        ``dynamic`` these values values are extracted from the request. The values listed here are the defaults
+        if not found in the request. The `dynamic` values are mixed with the fixed parameters and passed to the query.
+
+        ``operators`` fieldname:operator entries used for search conditions. See `nive.search`.
+
+        ``sort`` is a field name and used to sort the result.
+        ``order`` either '<','>' or empty. Orders the result list based on values ascending '<' or descending '>'
+        ``size`` number of batched items.
+        ``start`` start number of batched result sets.
+
+        ``advanced`` search options like group restraints. See `nive.search` for details.
+
+        Result:
+
+        The return value is based on the linked renderer. By default the result is returned as json
+        encoded result set: ::
+
+            `{"items":[items], "start":number, "size":number, "total":number}`
+
+        """
+        response = self.request.response
+        if not profile:
+            # look up the profile in two places
+            # 1) in custom view definition
+            viewconf = self.GetViewConf()
+            if viewconf and viewconf.get("search"):
+                profile = viewconf.options
+            else:
+                # 2) in app.configuration.search
+                profiles = self.context.app.configuration.get("search")
+                if not profiles:
+                    response.status = u"400 No search profiles found"
+                    return {"error": "No search profiles found", "items":[]}
+
+                profilename = self.GetFormValue("profile", u"default")
+                if not profilename:
+                    response.status = u"400 Empty search profile name"
+                    return {"error": "Empty search profile name", "items":[]}
+                profile = profiles.get(profilename)
+                if not profile:
+                    response.status = u"400 Unknown profile"
+                    return {"error": "Unknown profile", "items":[]}
+
+            if profile.get("groups"):
+                grps = profile.get("groups")
+                user = self.User()
+                #TODO local groups
+                if not user or not user.InGroups(grps):
+                    raise HTTPForbidden, "Profile not allowed"
+
+        # get dynamic values
+        values = {}
+        web = self.GetFormValues()
+        dynamic = profile.get("dynamic", {})
+        if dynamic:
+            for dynfield, dynvalue in dynamic.items():
+                values[dynfield] = web.get(dynfield, dynvalue)
+
+        if u"start" in dynamic:
+            try:
+                start = ExtractJSValue(values, u"start", 0, "int")
+            except ValueError:
+                # set http response code (invalid request)
+                response.status = u"400 Invalid parameter"
+                return {"error": "Invalid parameter: start", "items":[]}
+            del values[u"start"]
+        else:
+            start = profile.get("start",0)
+
+        if u"size" in dynamic:
+            try:
+                size = ExtractJSValue(values, u"size", 50, "int")
+                maxBatchNumber = self.context.app.configuration.get("maxBatchNumber") or DefaultMaxBatchNumber
+                if size > maxBatchNumber:
+                    size = maxBatchNumber
+            except ValueError:
+                # set http response code (invalid request)
+                response.status = u"400 Invalid parameter"
+                return {"error": "Invalid parameter: size", "items":[]}
+            del values[u"size"]
+        else:
+            size = profile.get("size", self.context.app.configuration.get("maxBatchNumber") or DefaultMaxBatchNumber)
+
+        if u"order" in dynamic:
+            order = values.get("order",None)
+            del values[u"order"]
+        else:
+            order = profile.get("order")
+        if order == u"<":
+            ascending = 1
+        elif order == u">":
+            ascending = 0
+        else:
+            ascending = None
+
+        if u"sort" in dynamic:
+            sort = values.get("sort",None)
+            if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds()]:
+                if type:
+                    if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(type)]:
+                        sort = None
+            del values[u"sort"]
+        else:
+            sort = profile.get("sort")
+
+        # fixed values
+        type = profile.get("type") or profile.get("pool_type")
+
+        if profile.get("container"):
+            parameter = {"pool_unitref": self.context.id}
+        else:
+            parameter = {}
+        parameter.update(profile.get("parameter",{}))
+        values.update(parameter)
+        parameter = values
+        operators = profile.get("operators")
+        fields = profile.get("fields")
+
+        # prepare keywords
+        kws = {}
+        if profile.get("advanced"):
+            kws.update(profile["advanced"])
+
+        if start is not None and start!=0:
+            # Search Functions use 0 based index, searchItems 1 based index
+            kws["start"] = start-1
+        if size is not None:
+            kws["max"] = size
+        if ascending is not None:
+            kws["ascending"] = ascending
+        if sort is not None:
+            kws["sort"] = sort
+
+        # run the query and handle the result
+        if type:
+            result = self.context.dataroot.SearchType(type, parameter=parameter, fields=fields, operators=operators, **kws)
+        else:
+            result = self.context.dataroot.Search(parameter=parameter, fields=fields, operators=operators, **kws)
+        values = {"items": result["items"],
+                  "start": result["start"]+1,
+                  "size": result["count"],
+                  "total": result["total"]}
+        return values
+
+
     # tree renderer ----------------------------------------------------------------------------------
+
+    def subtree(self, profile=None):
+        """
+        Returns complex results like parts of a subtree including several levels. Contained items
+        can be accessed through `items` in the result. `subtree` uses the items configuration
+        `render` option to determine the result values rendered in a json document.
+        If `render` is None the item will not be rendered at all.
+
+            # subtree profile values
+            {
+                "levels": 0,
+                "descent": (IContainer,),
+                "fields": {},
+                "parameter": {"pool_state": 1}
+            }
+
+        The system provides two options to configure subtree profiles. The first one uses the application configuration ::
+
+            appconf.subtree = {
+                # the default profile if no name is given
+                "default": {
+                    # profile values go here
+                },
+                "extended": {
+                    # profile values go here
+                },
+            }
+
+        To use the `extended` profile pass the profiles name as query parameter
+        e.g. `http://myapp.com/storage/subtree?profile=extended`. In this case `subtree()` will always return json.
+
+        The second option is to add a custom view based on `subtree`. This way you can add a custom renderer,
+        view name and permissions::
+
+            ViewConf(
+                name="tree",
+                attr="subtree",
+                context="nive_datastore.root.root",
+                permission="view",
+                renderer="myapp:templates/tree.pt",
+                subtree={
+                    # profile values go here
+                }
+            )
+
+        See `application configuration` how to include the view.
+
+        Options:
+
+        ``levels`` (default 0) the number of levels to include, 0=include all
+
+        ``descent`` e.g. `(IContainer,)` item types or interfaces to descent into subtree
+        ``fields`` dict. result values. If empty uses type definition toJson defaults
+        ``parameter`` query parameter for result selection e.g. `{"pool_state": 1}`
+
+        Result:
+
+        The return value is based on the linked renderer. By default the result is returned as json
+        encoded result set: ::
+
+            `{"items":{"items": {<values>}, <values>}, <values>}`
+
+        """
+        if not profile:
+            # look up the profile in two places
+            # 1) in custom view definition
+            viewconf = self.GetViewConf()
+            if viewconf and viewconf.get("subtree"):
+                profile = viewconf.options
+            else:
+                # 2) in app.configuration.search
+                def returnError(error, status):
+                    data = json.dumps(error)
+                    return self.SendResponse(data, mime="application/json", raiseException=False, status=status)
+
+                profiles = self.context.app.configuration.get("subtree")
+                if not profiles:
+                    status = u"400 No subtree profile found"
+                    return returnError({"error": "No subtree profile found"}, status)
+
+                profilename = self.GetFormValue("profile") or self.context.app.configuration.get("defaultSubtree")
+                if not profilename:
+                    status = u"400 Empty subtree profile name"
+                    return returnError({"error": "Empty subtree profile name"}, status)
+                profile = profiles.get(profilename)
+                if not profile:
+                    status = u"400 Unknown profile"
+                    return returnError({"error": "Unknown profile"}, status)
+
+        if isinstance(profile, dict):
+            profile = Conf(**profile)
+
+        values = self._renderTree(self.context, profile)
+        data = JsonDataEncoder().encode(values)
+        return self.SendResponse(data, mime="application/json", raiseException=False)
+
 
     def _renderTree(self, context, profile):
         # cache field ids and types
@@ -696,46 +888,6 @@ class APIv1(BaseView):
         return itemSubtree(context, levels, includeSubtree=True)
         
     
-    def subtree(self, profile=None):
-        """
-        Returns complex results like parts of a subtree including several levels. Contained items
-        can be accessed through `items` in the result. `subtree` uses the items configuration
-        `render` option to determine the result values rendered in a json document.
-        If `render` is None the item will not be rendered at all.
-        
-        Parameter:
-
-        - profile: name of the subtree profile to use for subtree rendering
-        
-        returns json document
-        """
-        if not profile:
-            def returnError(error, status):
-                data = json.dumps(error)
-                return self.SendResponse(data, mime="application/json", raiseException=False, status=status)
-            
-            profiles = self.context.app.configuration.get("subtree")
-            if not profiles:
-                status = u"400 No subtree profile found"
-                return returnError({"error": "No subtree profile found"}, status)
-
-            profilename = self.GetFormValue("profile") or self.context.app.configuration.get("defaultSubtree")
-            if not profilename:
-                status = u"400 Empty subtree profile name"
-                return returnError({"error": "Empty subtree profile name"}, status)
-            profile = profiles.get(profilename)
-            if not profile:
-                status = u"400 Unknown profile"
-                return returnError({"error": "Unknown profile"}, status)
-        
-        if isinstance(profile, dict):
-            profile = Conf(**profile)
-
-        values = self._renderTree(self.context, profile)
-        data = JsonDataEncoder().encode(values)
-        return self.SendResponse(data, mime="application/json", raiseException=False)
-        
-
     def renderTmpl(self, template=None):
         """
         Renders the items template defined in the configuration (`ObjectConf.template`). The template
@@ -821,7 +973,7 @@ class APIv1(BaseView):
             if not isinstance(assets, (tuple, list)):
                 assets = ()
             head = form.HTMLHead(ignore=assets)
-        return self.SendResponse(data=head+data, headers=(("XResult", str(result)),))
+        return self.SendResponse(data=head+data, headers=[("X-Result", str(result).lower())], raiseException=False)
         #return {u"result": result, u"content": data, u"head": head}
         
 
@@ -868,7 +1020,7 @@ class APIv1(BaseView):
         typeconf = self.context.configuration
         subset = self.GetFormValue("subset") or "newItem"
         if not subset:
-            return self.SendResponse(data=u"No subset given", headers=(("XResult", "true"),))
+            return self.SendResponse(data=u"No subset given", headers=[("X-Result", "true")])
         form = ItemForm(view=self, loadFromType=typeconf)
         form.subsets = copy.deepcopy(typeconf.forms)
         subsetdef = form.subsets.get(subset)
@@ -892,7 +1044,7 @@ class APIv1(BaseView):
             if not isinstance(assets, (tuple, list)):
                 assets = ()
             head = form.HTMLHead(ignore=assets)
-        return self.SendResponse(data=head+data, headers=(("XResult", str(result)),))
+        return self.SendResponse(data=head+data, headers=[("X-Result", str(result).lower())], raiseException=False)
         #return {u"result": result, u"content": data, u"head": head}
 
 

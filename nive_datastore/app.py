@@ -23,14 +23,13 @@ Database connection and basic datastore application configuration
                   title = "My Data Storage",
                   maxStoreItems = 20,
                   maxBatchNumber = 100,
-                  search = {"all": {  
+                  search = {"default": {
                                "type": "bookmark", 
                                "container": False,
                                "fields": ["id", "link", "comment", "pool_changedby"],
                                "parameter": {"share": True}
                   }},
-                  defaultSearch = "all",
-                  subtree = {"all": {
+                  subtree = {"default": {
                                  "levels": 0,              # the number of levels to include, 0=include all
                                  "descent": (IContainer,), # item types or interfaces to descent into subtree
                                  "fields": {},             # if empty uses type definition toJson defaults
