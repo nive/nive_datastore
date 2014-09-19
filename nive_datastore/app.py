@@ -113,7 +113,7 @@ import copy
 from nive_datastore.i18n import _
 from nive.definitions import implements, Interface
 from nive.definitions import AppConf, FieldConf, GroupConf
-from nive.definitions import SystemFlds, UserFlds
+from nive.definitions import SystemFlds, UserFlds, WorkflowFlds
 from nive.security import ALL_PERMISSIONS, Allow, Everyone, Deny
 from nive.components.objects.base import ApplicationBase
 
@@ -122,8 +122,8 @@ configuration = AppConf(
     id = "storage",
     title = u"Nive Data Storage",
     context = "nive_datastore.app.DataStorage",
-    workflowEnabled = False,
-    meta = copy.deepcopy(list(SystemFlds)) + copy.deepcopy(list(UserFlds)),
+    workflowEnabled = True,
+    meta = copy.deepcopy(list(SystemFlds)) + copy.deepcopy(list(UserFlds)) + copy.deepcopy(list(WorkflowFlds)),
     translations="nive_datastore:locale/"
 )
 
@@ -133,9 +133,12 @@ configuration.modules = [
     #    based on 'nive.definitions.ObjectConf' 
     # root 
     "nive_datastore.root",
+    # workflow
+    "nive_cms.workflow",
     # web api (view layer)
     "nive_datastore.webapi",
-    #extensions
+    # extensions
+    "nive.extensions.filename",
     # tools
     "nive.tools.dbStructureUpdater", "nive.tools.cmsstatistics",
     "nive.tools.exportJson", "nive.tools.dbSqlDump", "nive.tools.dbJsonDump", 

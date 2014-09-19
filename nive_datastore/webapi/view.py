@@ -582,7 +582,7 @@ class APIv1(BaseView):
             # 1) in custom view definition
             viewconf = self.GetViewConf()
             if viewconf and viewconf.get("search"):
-                profile = viewconf.options
+                profile = viewconf.search
             else:
                 # 2) in app.configuration.search
                 profiles = self.context.app.configuration.get("search")
@@ -770,7 +770,7 @@ class APIv1(BaseView):
             # 1) in custom view definition
             viewconf = self.GetViewConf()
             if viewconf and viewconf.get("subtree"):
-                profile = viewconf.options
+                profile = viewconf.subtree
             else:
                 # 2) in app.configuration.search
                 def returnError(error, status):
