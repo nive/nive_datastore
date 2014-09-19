@@ -84,6 +84,7 @@ def app_db(confs=None):
         dbfile.CreateDirectories()
     try:
         a.Query("select id from pool_meta where id=1")
+        a.Query("select pool_wfp from pool_meta where id=1")
         a.Query("select id from bookmarks where id=1")
         a.Query("select id from tracks where id=1")
         a.Query("select id from pool_files where id=1")
