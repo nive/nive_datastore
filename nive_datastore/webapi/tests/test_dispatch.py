@@ -10,7 +10,7 @@ from nive_datastore.webapi.view import *
 from nive_datastore.tests.db_app import *
 from nive_datastore.tests import __local
 
-from pyramid import testing 
+from pyramid import testing
 from pyramid.httpexceptions import HTTPFound
 from pyramid.renderers import render
 

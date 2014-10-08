@@ -34,7 +34,7 @@ import json
 
 from pyramid.view import render_view
 from pyramid.httpexceptions import HTTPForbidden
-from pyramid import testing 
+from pyramid import testing
 
 
 class DispatchResponse(object):
