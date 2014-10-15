@@ -8,6 +8,7 @@ import copy
 
 from pyramid.httpexceptions import HTTPForbidden
 from pyramid.security import has_permission
+from pyramid.renderers import render
 
 from nive.definitions import ViewModuleConf, ViewConf, Conf
 from nive.definitions import IObject, IContainer
@@ -35,10 +36,10 @@ item_views = ViewModuleConf(
         # update
         ViewConf(name="update",      attr="setContext",  permission="api-update",     renderer="json"),
         # rendering
-        ViewConf(name="subtree",     attr="subtree",     permission="api-subtree"),
-        ViewConf(name="render",      attr="render",      permission="api-render"),
+        ViewConf(name="subtree",     attr="subtree",     permission="api-subtree",    renderer="string"),
+        ViewConf(name="render",      attr="renderTmpl",  permission="api-render"),
         # forms
-        ViewConf(name="updateForm",  attr="updateForm",  permission="api-updateform"),
+        ViewConf(name="updateForm",  attr="updateForm",  permission="api-updateform", renderer="string"),
         # workflow
         ViewConf(name="action",      attr="action",      permission="api-action",     renderer="json"),
         ViewConf(name="state",       attr="state",       permission="api-state",      renderer="json"),
@@ -72,13 +73,13 @@ container_views = ViewModuleConf(
         # read contained item
         ViewConf(name="getItem",    attr="getItem",    permission="api-read",   renderer="json"),
         # rendering
-        ViewConf(name="subtree",    attr="subtree",    permission="api-subtree"),
-        ViewConf(name="render",     attr="render",     permission="api-render"),
+        ViewConf(name="subtree",    attr="subtree",    permission="api-subtree",renderer="string"),
+        ViewConf(name="render",     attr="renderTmpl", permission="api-render"),
         # add and update contained item
         ViewConf(name="newItem",    attr="newItem",    permission="api-add",    renderer="json"),
         ViewConf(name="setItem",    attr="setItem",    permission="api-update", renderer="json"),
         # forms
-        ViewConf(name="newItemForm",attr="newItemForm",permission="api-addform"),
+        ViewConf(name="newItemForm",attr="newItemForm",permission="api-addform",renderer="string"),
         # delete
         ViewConf(name="deleteItem", attr="deleteItem", permission="api-delete", renderer="json"),
     ),
@@ -774,8 +775,10 @@ class APIv1(BaseView):
             else:
                 # 2) in app.configuration.search
                 def returnError(error, status):
-                    data = json.dumps(error)
-                    return self.SendResponse(data, mime="application/json", raiseException=False, status=status)
+                    #data = json.dumps(error)
+                    #return self.SendResponse(data, mime="application/json", raiseException=False, status=status)
+                    request.response.status = status
+                    return error
 
                 profiles = self.context.app.configuration.get("subtree")
                 if not profiles:
@@ -795,9 +798,9 @@ class APIv1(BaseView):
             profile = Conf(**profile)
 
         values = self._renderTree(self.context, profile)
-        data = JsonDataEncoder().encode(values)
-        return self.SendResponse(data, mime="application/json", raiseException=False)
-
+        #data = JsonDataEncoder().encode(values)
+        #return self.SendResponse(data, mime="application/json", raiseException=False)
+        return values
 
     def _renderTree(self, context, profile):
         # cache field ids and types
@@ -942,15 +945,26 @@ class APIv1(BaseView):
         To get required assets in a seperate call use `?assets=only` as query parameter. This will
         return the required css and js assets for the specific form only.
         """
-        headeronly = self.GetFormValue("assets")=="only"
-        typename = self.GetFormValue("type") or self.GetFormValue("pool_type")
+        # look up the new type in custom view definition
+        viewconf = self.GetViewConf()
+        if viewconf and viewconf.get("values"):
+            typename = viewconf.values.get("type")
+            subset = viewconf.values.get("subset")
         if not typename:
-            return {u"result": False, u"content": u"", u"head": u"", u"message": u"No type given"}
-        typeconf = self.context.app.GetObjectConf(typename)
-        subset = self.GetFormValue("subset") or "newItem"
+            typename = self.GetFormValue("type") or self.GetFormValue("pool_type")
+            if not typename:
+                self.AddHeader("X-Result", "false")
+                return {"content": u"Type is empty"}
+
         if not subset:
-            return {u"result": False, u"content": u"", u"head": u"", u"message": u"No subset given"}
+            subset = self.GetFormValue("subset") or "newItem"
+            if not subset:
+                self.AddHeader("X-Result", "false")
+                return {"content": u"No subset"}
+
+        typeconf = self.context.app.GetObjectConf(typename)
         form = ItemForm(view=self, loadFromType=typeconf)
+        self._loadFormSettings(form)
         form.subsets = typeconf.forms
         subsetdef = form.subsets.get(subset)
         if subsetdef and not subsetdef.get("actions"):
@@ -961,21 +975,29 @@ class APIv1(BaseView):
 
         form.Setup(subset=subset, addTypeField=True)
         form.use_ajax = True
-        if headeronly:
-            return self.SendResponse(data=form.HTMLHead(ignore=()))
+        if self.GetFormValue("assets")=="only":
+            #return self.SendResponse(data=form.HTMLHead(ignore=()))
+            self.AddHeader("X-Result", "true")
+            return {"content": form.HTMLHead(ignore=())}
+
         # process and render the form.
         result, data, action = form.Process(pool_type=typename)
         if IObject.providedBy(result):
             result = result.id
-        head = u""
+
+        assets = ()
         if subsetdef.get("assets"):
             assets = subsetdef.get("assets")
             if not isinstance(assets, (tuple, list)):
                 assets = ()
-            head = form.HTMLHead(ignore=assets)
-        return self.SendResponse(data=head+data, headers=[("X-Result", str(result).lower())], raiseException=False)
-        #return {u"result": result, u"content": data, u"head": head}
-        
+        head = form.HTMLHead(ignore=assets)
+        self.AddHeader("X-Result", str(result).lower())
+        return {"content": head+data}
+
+        #return self.SendResponse(data=head+data, headers=[("X-Result", str(result).lower())], raiseException=False)
+        #self.AddHeader("X-Result", str(result).lower())
+        #return {"content": data}
+
 
     def updateForm(self):
         """
@@ -1020,8 +1042,12 @@ class APIv1(BaseView):
         typeconf = self.context.configuration
         subset = self.GetFormValue("subset") or "newItem"
         if not subset:
-            return self.SendResponse(data=u"No subset given", headers=[("X-Result", "true")])
+            #return self.SendResponse(data=u"No subset found", headers=[("X-Result", "true")])
+            self.AddHeader("X-Result", "false")
+            return {"content": u"No subset"}
+
         form = ItemForm(view=self, loadFromType=typeconf)
+        self._loadFormSettings(form)
         form.subsets = copy.deepcopy(typeconf.forms)
         subsetdef = form.subsets.get(subset)
         if subsetdef and not subsetdef.get("actions"):
@@ -1033,7 +1059,10 @@ class APIv1(BaseView):
         form.Setup(subset=subset, addTypeField=True)
         form.use_ajax = True
         if headeronly:
-            return self.SendResponse(data=form.HTMLHead(ignore=()))
+            #return self.SendResponse(data=form.HTMLHead(ignore=()))
+            self.AddHeader("X-Result", "true")
+            return {"content": form.HTMLHead(ignore=())}
+
         # process and render the form.
         result, data, action = form.Process(pool_type=typeconf.id)
         if IObject.providedBy(result):
@@ -1044,8 +1073,22 @@ class APIv1(BaseView):
             if not isinstance(assets, (tuple, list)):
                 assets = ()
             head = form.HTMLHead(ignore=assets)
-        return self.SendResponse(data=head+data, headers=[("X-Result", str(result).lower())], raiseException=False)
-        #return {u"result": result, u"content": data, u"head": head}
+
+        #return self.SendResponse(data=head+data, headers=[("X-Result", str(result).lower())], raiseException=False)
+        self.AddHeader("X-Result", str(result).lower())
+        return {"content": head+data}
+
+
+    def _loadFormSettings(self, form):
+        # form rendering settings
+        formsettings = self.viewModule.get("form")
+        if formsettings:
+            form.widget.settings = formsettings
+            # map item and action templates to form
+            if "item_template" in formsettings:
+                form.widget.item_template = formsettings["item_template"]
+            if "action_template" in formsettings:
+                form.widget.action_template = formsettings["action_template"]
 
 
     # workflow functions ------------------------------------------------------------
@@ -1091,7 +1134,7 @@ class APIv1(BaseView):
 
     def state(self):
         """
-        Get the current contexts workflow state.
+        Get the current contexts' workflow state.
         
         returns state information
         
@@ -1122,13 +1165,64 @@ class APIv1(BaseView):
                     "fromstate":transition.fromstate,
                     "tostate":transition.tostate,
                     "actions":[_serI(a) for a in transition.actions]}
-            
-        
+
         return {"id": state["state"].id,
                 "name": state["state"].name,
                 "process": serI(state["process"]),
                 "transitions": [_serT(t) for t in state["transitions"]],
                 "result": True}
+
+
+    # list rendering ------------------------------------------------------------
+
+    def renderListItem(self, values, typename=None, template=None):
+        """
+        This function renders data records (non object) returned by Select or Search
+        functions with the object configuration defined `listing` renderer.
+
+        Unlike the object renderer this function does not require full object loads like
+        `renderTmpl` but works with simple dictionary lists.
+
+        Make sure all values required to render the template are passed to `renderListItems`
+        i.e. included as result in the select functions.
+
+        E.g.
+
+        Configuration ::
+
+            ObjectConf(id="article", listing="article-list.pt", ...)
+
+        Template ::
+
+            <h2>${name}</h2>
+            <p>${text}</p>
+            <a href="${pool_filename}">read all</a>
+
+        Usage ::
+
+            <div tal:content="structure view.renderListItem(values, 'article')"
+                 class="col-lg-12"></div>
+
+        :values:
+        :typename:
+        :template:
+        """
+        if template:
+            values["view"] = self
+            return render(template, values, request=self.request)
+        typename = typename or values.get("type")
+        if not typename:
+            return u"-no type-"
+        if not hasattr(self, "_c_listing_"+typename):
+            typeconf = self.context.app.GetObjectConf(typename)
+            tmpl = typeconf.get("listing")
+            setattr(self, "_c_listing_"+typename, tmpl)
+        else:
+            tmpl = getattr(self, "_c_listing_"+typename)
+        values["view"] = self
+        return render(tmpl, values, request=self.request)
+
+
 
 
 class ItemForm(ObjectForm):
