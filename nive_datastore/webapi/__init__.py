@@ -9,5 +9,5 @@ configuration = ModuleConf(
     modules=(
         "nive_datastore.webapi.view.item_views", 
         "nive_datastore.webapi.view.container_views"
-    )
+    ),
 )

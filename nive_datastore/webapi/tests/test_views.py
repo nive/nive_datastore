@@ -564,6 +564,15 @@ class tWebapi_db(object):
         profile = {
             "container": False,
             "fields": ["id", "pool_changedby"],
+            "parameter": lambda c, r: {"pool_changedby":"test"},
+            "operators": {"pool_changedby":"="}
+        }
+        result = view.searchItems(profile=profile)
+        self.assert_(len(result["items"])==6)
+
+        profile = {
+            "container": False,
+            "fields": ["id", "pool_changedby"],
             "parameter": {"pool_changedby":"test"},
             "operators": {"pool_changedby":"<>"}
         }
@@ -641,18 +650,17 @@ class tWebapi_db(object):
         create_track(o3, user)
 
         values = view.subtree()
-        self.assert_(values.status.startswith("400"))
+        self.assert_(self.request.response.status.startswith("400"))
 
         values = view.subtree(profile={})
-        self.assert_(values.status.startswith("400"))
+        self.assert_(self.request.response.status.startswith("400"))
 
         self.request.POST = {"profile": "none"}
         values = view.subtree()
-        self.assert_(values.status.startswith("400"))
+        self.assert_(self.request.response.status.startswith("400"))
 
         profile = {"descent": ("nive.definitions.IObject",), "fields": {}}
-        response = view.subtree(profile=profile)
-        values = json.loads(response.body)
+        values = view.subtree(profile=profile)
         self.assert_(values!={})
         self.assert_(len(values["items"])==2)
         self.assert_(len(values["items"][0]["items"])==1)
@@ -661,8 +669,7 @@ class tWebapi_db(object):
                                             
         view = APIv1(o1, self.request)
         self.request.POST = {"subtree": "0"}
-        response = view.subtree()
-        values = json.loads(response.body)
+        values = view.subtree()
         self.assert_(values!={})
         self.assert_(values.get("items")==None)
         
@@ -698,14 +705,14 @@ class tWebapi_db(object):
 
         self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text"}
         result = view.newItemForm()
-        self.assert_(result.headers["X-Result"])
+        self.assert_(self.request.response.headers["X-Result"])
 
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "create$": "1"}
         try:
             view.newItemForm()
         except ExceptionalResponse, result:
-            self.assert_(result.headers["X-Result"])
+            self.assert_(self.request.response.headers["X-Result"])
             self.assert_(objs+1==len(r.GetObjsList(fields=["id"])))
 
 
@@ -719,12 +726,12 @@ class tWebapi_db(object):
         # no type
         self.request.POST = {"link": u"the link", "comment": u"some text"}
         result = view.newItemForm()
-        self.assertFalse(result["result"])
+        self.assertFalse(self.request.response["result"])
 
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"link": u"the link", "comment": u"some text", "create$": "1"}
         result = view.newItemForm()
-        self.assertFalse(result.headers["X-Result"])
+        self.assertFalse(self.request.response.headers["X-Result"])
         self.assert_(objs==len(r.GetObjsList(fields=["id"])))
         
         # wrong subset
@@ -738,7 +745,7 @@ class tWebapi_db(object):
             result = view.newItemForm()
             self.assert_(False)
         except ExceptionalResponse, result:
-            self.assert_(result.headers["X-Result"])
+            self.assert_(self.request.response.headers["X-Result"])
             self.assert_(objs==len(r.GetObjsList(fields=["id"])))
         
         
@@ -753,7 +760,7 @@ class tWebapi_db(object):
 
         self.request.POST = {}
         result = view.updateForm()
-        self.assert_(result.headers["X-Result"])
+        self.assert_(self.request.response.headers["X-Result"])
 
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"link": u"the new link", "comment": u"some new text", "create$": "1"}
@@ -761,7 +768,7 @@ class tWebapi_db(object):
             result = view.updateForm()
             self.assert_(False)
         except ExceptionalResponse, result:
-            self.assert_(result.headers["X-Result"])
+            self.assert_(self.request.response.headers["X-Result"])
             self.assert_(objs==len(r.GetObjsList(fields=["id"])))
 
 
@@ -782,7 +789,7 @@ class tWebapi_db(object):
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "unknown$": "1"}
         result = view.updateForm()
-        self.assert_(result.headers["X-Result"])
+        self.assert_(self.request.response.headers["X-Result"])
         self.assert_(objs==len(r.GetObjsList(fields=["id"])))
         
         

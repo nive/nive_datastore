@@ -10,7 +10,7 @@ from pyramid.httpexceptions import HTTPForbidden
 from pyramid.security import has_permission
 from pyramid.renderers import render
 
-from nive.definitions import ViewModuleConf, ViewConf, Conf
+from nive.definitions import ViewModuleConf, ViewConf, Conf, ModuleConf
 from nive.definitions import IObject, IContainer
 from nive.workflow import WorkflowNotAllowed
 from nive.views import BaseView
@@ -553,9 +553,28 @@ class APIv1(BaseView):
 
         ``fields`` a list of data fields to be included in the result set. See `nive.search`.
 
-        ``parameter`` is a dictionary of fixed query parameters used in the select statement. These values cannot
-        be changed through request form values. See `dynamic` for search parameter that need to updated through
-        the request.
+        ``parameter`` is a dictionary or callable of fixed query parameters used in the select statement. These values cannot
+        be changed through request form values. The callback takes two parameters `context` and `request` and should return
+        a dictionary. E.g. ::
+
+            def makeParam(context, request):
+                return {"id": context.id}
+
+            {   ...
+                # adds the contexts file as parameter
+                "parameter": makeParam,
+                ...
+            }
+
+        or as inline function definition ::
+
+            {   ...
+                # adds the contexts file as parameter
+                "parameter": lambda context, request, view: {"id": context.id},
+                ...
+            }
+
+
 
         ``dynamic`` these values values are extracted from the request. The values listed here are the defaults
         if not found in the request. The `dynamic` values are mixed with the fixed parameters and passed to the query.
@@ -652,25 +671,29 @@ class APIv1(BaseView):
         else:
             ascending = None
 
+        # fixed values
+        typename = profile.get("type") or profile.get("pool_type")
+
         if u"sort" in dynamic:
             sort = values.get("sort",None)
             if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds()]:
-                if type:
-                    if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(type)]:
+                if typename:
+                    if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(typename)]:
                         sort = None
             del values[u"sort"]
         else:
             sort = profile.get("sort")
 
-        # fixed values
-        type = profile.get("type") or profile.get("pool_type")
+        # get the configured parameters. if it is a callable call it with current
+        # request and context.
+        p = profile.get("parameter", None)
+        if callable(p):
+            p = apply(p, (self.context, self.request))
+        if p:
+            values.update(p)
 
         if profile.get("container"):
-            parameter = {"pool_unitref": self.context.id}
-        else:
-            parameter = {}
-        parameter.update(profile.get("parameter",{}))
-        values.update(parameter)
+            values["pool_unitref"] = self.context.id
         parameter = values
         operators = profile.get("operators")
         fields = profile.get("fields")
@@ -691,8 +714,8 @@ class APIv1(BaseView):
             kws["sort"] = sort
 
         # run the query and handle the result
-        if type:
-            result = self.context.dataroot.SearchType(type, parameter=parameter, fields=fields, operators=operators, **kws)
+        if typename:
+            result = self.context.dataroot.SearchType(typename, parameter=parameter, fields=fields, operators=operators, **kws)
         else:
             result = self.context.dataroot.Search(parameter=parameter, fields=fields, operators=operators, **kws)
         values = {"items": result["items"],
@@ -777,7 +800,7 @@ class APIv1(BaseView):
                 def returnError(error, status):
                     #data = json.dumps(error)
                     #return self.SendResponse(data, mime="application/json", raiseException=False, status=status)
-                    request.response.status = status
+                    self.request.response.status = status
                     return error
 
                 profiles = self.context.app.configuration.get("subtree")
@@ -806,9 +829,9 @@ class APIv1(BaseView):
         # cache field ids and types
         fields = {}
         for conf in context.app.GetAllObjectConfs():
-            if conf.id in profile.fields:
+            if conf.id in profile.get("fields"):
                 # custom list of fields in profile for type 
-                fields[conf.id] = profile.fields[conf.id]
+                fields[conf.id] = profile.get("fields")[conf.id]
                 continue
             # use type default
             render = conf.get("toJson")
@@ -824,7 +847,7 @@ class APIv1(BaseView):
             parameter["pool_type"] = fields.keys()
         
         # prepare types to descent in tree structure
-        temp = profile.descent
+        temp = profile.get("descent",[])
         descenttypes = []
         for t in temp:
             resolved = ResolveName(t)
@@ -848,6 +871,8 @@ class APIv1(BaseView):
             name = item.GetTypeID()
             if not name in fields:
                 return iv
+            if profile.get("addContext"):
+                iv["context"] = item
             for field in fields[item.GetTypeID()]:
                 iv[field] = item.GetFld(field)
             return iv
@@ -945,6 +970,7 @@ class APIv1(BaseView):
         To get required assets in a seperate call use `?assets=only` as query parameter. This will
         return the required css and js assets for the specific form only.
         """
+        typename = subset = ""
         # look up the new type in custom view definition
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("values"):
@@ -974,29 +1000,23 @@ class APIv1(BaseView):
             form.subsets[subset] = subsetdef
 
         form.Setup(subset=subset, addTypeField=True)
-        form.use_ajax = True
         if self.GetFormValue("assets")=="only":
-            #return self.SendResponse(data=form.HTMLHead(ignore=()))
             self.AddHeader("X-Result", "true")
-            return {"content": form.HTMLHead(ignore=())}
+            return {"content": form.HTMLHead(ignore=[a[0] for a in self.configuration.assets])}
 
         # process and render the form.
         result, data, action = form.Process(pool_type=typename)
         if IObject.providedBy(result):
             result = result.id
 
-        assets = ()
-        if subsetdef.get("assets"):
-            assets = subsetdef.get("assets")
-            if not isinstance(assets, (tuple, list)):
-                assets = ()
-        head = form.HTMLHead(ignore=assets)
         self.AddHeader("X-Result", str(result).lower())
-        return {"content": head+data}
+        if "options" in subsetdef and subsetdef["options"].get("assets"):
+            # if assets are enabled add required js+css for form except those defined
+            # in the view modules asset list
+            head = form.HTMLHead(ignore=[a[0] for a in self.configuration.assets])
+            return {"content": head+data}
 
-        #return self.SendResponse(data=head+data, headers=[("X-Result", str(result).lower())], raiseException=False)
-        #self.AddHeader("X-Result", str(result).lower())
-        #return {"content": data}
+        return {"content": data}
 
 
     def updateForm(self):
@@ -1057,7 +1077,6 @@ class APIv1(BaseView):
             form.subsets[subset] = subsetdef
 
         form.Setup(subset=subset, addTypeField=True)
-        form.use_ajax = True
         if headeronly:
             #return self.SendResponse(data=form.HTMLHead(ignore=()))
             self.AddHeader("X-Result", "true")
@@ -1081,14 +1100,16 @@ class APIv1(BaseView):
 
     def _loadFormSettings(self, form):
         # form rendering settings
-        formsettings = self.viewModule.get("form")
-        if formsettings:
-            form.widget.settings = formsettings
-            # map item and action templates to form
-            if "item_template" in formsettings:
-                form.widget.item_template = formsettings["item_template"]
-            if "action_template" in formsettings:
-                form.widget.action_template = formsettings["action_template"]
+        # customize form widget. values are applied to form.widget
+        form.widget.item_template = "field_onecolumn"
+        form.widget.action_template = "form_actions_onecolumn"
+        form.use_ajax = True
+        form.action = self.request.url
+        vm = self.viewModule
+        if vm:
+            formsettings = self.viewModule.get("form")
+            if isinstance(formsettings, dict):
+                form.ApplyOptions(formsettings)
 
 
     # workflow functions ------------------------------------------------------------
@@ -1110,7 +1131,7 @@ class APIv1(BaseView):
         """
         action = self.GetFormValue("action") or "newItem"
         if not action:
-            return {"result": False, "messages": ["No action given"]}
+            return {"result": False, "messages": ["Action is empty"]}
         transition = self.GetFormValue("transition")
         test = self.GetFormValue("test")=="true"
         
@@ -1232,14 +1253,55 @@ class ItemForm(ObjectForm):
     Supports sort form parameter *pepos*.
     """
     actions = [
-        Conf(id=u"default",    method="StartFormRequest", name=u"Initialize", hidden=True,  css_class=u"",            html=u"", tag=u""),
-        Conf(id=u"create",     method="CreateObj",        name=u"Create",     hidden=False, css_class=u"btn btn-primary",  html=u"", tag=u""),
-        Conf(id=u"defaultEdit",method="StartObject",      name=u"Initialize", hidden=True,  css_class=u"",            html=u"", tag=u""),
-        Conf(id=u"edit",       method="UpdateObj",        name=u"Save",       hidden=False, css_class=u"btn btn-primary",  html=u"", tag=u""),
-        Conf(id=u"cancel",     method="Cancel",           name=u"Cancel",     hidden=False, css_class=u"buttonCancel",html=u"", tag=u"")
+        Conf(id=u"default",    method="StartFormRequest", name=u"Initialize", hidden=True,  css_class=u""),
+        Conf(id=u"create",     method="CreateObj",        name=u"Create",     hidden=False, css_class=u"btn btn-primary"),
+        Conf(id=u"defaultEdit",method="StartObject",      name=u"Initialize", hidden=True,  css_class=u""),
+        Conf(id=u"edit",       method="UpdateObj",        name=u"Save",       hidden=False, css_class=u"btn btn-primary"),
+        Conf(id=u"cancel",     method="Cancel",           name=u"Cancel",     hidden=False, css_class=u"buttonCancel")
     ]
     defaultNewItemAction = {"actions": [u"create"],  "defaultAction": "default"}
     defaultSetItemAction = {"actions": [u"edit"],    "defaultAction": "defaultEdit"}
     subsets = None
 
+
+
+"""
+A string renderer extension to support dictionaries for better compatibility with template renderer.
+Return a single value 'content' to the renderer and the content will be returned as
+the responses body. ::
+
+    # view result
+    {"content": "<h1>The response!</h1>"}
+    # is returned as
+    "<h1>The response!</h1>"
+
+To activate the renderer add 'stringRendererConf' to the applications modules. ::
+
+    configuration.modules.append("nive_datastore.webapi.view.stringRendererConf")
+
+"""
+
+def string_renderer_factory(info):
+    def _render(value, system):
+        if isinstance(value, dict) and "content" in value:
+            value = value["content"]
+        elif not isinstance(value, string_types):
+            value = str(value)
+        request = system.get('request')
+        if request is not None:
+            response = request.response
+            ct = response.content_type
+            if ct == response.default_content_type:
+                response.content_type = 'text/plain'
+        return value
+    return _render
+
+def SetupStringRenderer(app, pyramidConfig):
+    if pyramidConfig:
+        # pyramidConfig is None in tests
+        pyramidConfig.add_renderer('string', string_renderer_factory)
+
+stringRendererConf = ModuleConf(
+    events = (Conf(event="startRegistration", callback=SetupStringRenderer),),
+)
 
