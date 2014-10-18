@@ -1060,7 +1060,7 @@ class APIv1(BaseView):
         """
         headeronly = self.GetFormValue("assets")=="only"
         typeconf = self.context.configuration
-        subset = self.GetFormValue("subset") or "newItem"
+        subset = self.GetFormValue("subset") or "setItem"
         if not subset:
             #return self.SendResponse(data=u"No subset found", headers=[("X-Result", "true")])
             self.AddHeader("X-Result", "false")
@@ -1254,10 +1254,10 @@ class ItemForm(ObjectForm):
     """
     actions = [
         Conf(id=u"default",    method="StartFormRequest", name=u"Initialize", hidden=True,  css_class=u""),
-        Conf(id=u"create",     method="CreateObj",        name=u"Create",     hidden=False, css_class=u"btn btn-primary"),
+        Conf(id=u"create",     method="CreateObj",        name=u"Submit",     hidden=False, css_class=u"btn btn-primary"),
         Conf(id=u"defaultEdit",method="StartObject",      name=u"Initialize", hidden=True,  css_class=u""),
         Conf(id=u"edit",       method="UpdateObj",        name=u"Save",       hidden=False, css_class=u"btn btn-primary"),
-        Conf(id=u"cancel",     method="Cancel",           name=u"Cancel",     hidden=False, css_class=u"buttonCancel")
+        Conf(id=u"cancel",     method="Cancel",   name=u"Cancel and discard", hidden=False, css_class=u"btn btn-default")
     ]
     defaultNewItemAction = {"actions": [u"create"],  "defaultAction": "default"}
     defaultSetItemAction = {"actions": [u"edit"],    "defaultAction": "defaultEdit"}
