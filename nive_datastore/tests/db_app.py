@@ -41,7 +41,8 @@ collection2 = ObjectConf("nive_datastore.item",
     forms = {
         "newItem": {"fields": ("url", "number", "something"), "newItem": True }, 
         "setItem": {"fields": ("url", "number", "something") }
-    }
+    },
+    toJson = ("url", "number")
 )
 
 

@@ -67,6 +67,7 @@ class Dispatcher(object):
         disprequest = testing.DummyRequest() #DispatchRequest()
         disprequest.context = self
         disprequest.POST = kw
+        disprequest.method = "POST"
         disprequest.content_type = "dict"
         if not raiseUnauthorized:
             try:

@@ -23,6 +23,7 @@ class tWebapi_db(object):
         request._LOCALE_ = "en"
         self.request = request
         self.request.content_type = ""
+        self.request.method = "POST"
         self.config = testing.setUp(request=request)
         self.config.include('pyramid_chameleon')
         self._loadApp()
@@ -57,31 +58,18 @@ class tWebapi_db(object):
         o1 = create_bookmark(r, user)
         self.remove.append(o1.id)
         items = [o1]
-        values = DeserializeItems(view, items)
+        values = DeserializeItems(view, items, ("comment", "link"))
         self.assert_(len(values)==1)
-        items = o1
-        values = DeserializeItems(view, items)
+        values = DeserializeItems(view, items, o1.configuration)
         self.assert_(len(values)==1)
-        def ToDict():
-            return {"no": 0}
-        o1.ToDict = ToDict
-        items = o1
-        values = DeserializeItems(view, items)
+        values = DeserializeItems(view, items, {"bookmark": ("comment", "link")})
         self.assert_(len(values)==1)
-        self.assert_(values[0]["no"]==0)
+        values = DeserializeItems(view, items, {"default__": ("comment", "link")})
+        self.assert_(len(values)==1)
 
-
-    def test_serialize(self):
-        user = User(u"test")
-        view = APIv1(self.root, self.request)
-        r = self.root
-        values = {"link": u"the link 1", "comment": u"some text"}
-        result, data, errors = SerializeItem(view, values, "bookmark", "newItem")
-        self.assert_(result)
-        self.assert_(data==values)
-        result, data, errors = SerializeItem(view, values, "bookmark", "no subset")
-        self.assert_(result)
-        self.assert_(data==values)
+        items = o1
+        values = DeserializeItems(view, items, ("comment", "link"))
+        self.assert_(len(values)==1)
 
 
     def test_new(self):
@@ -102,8 +90,8 @@ class tWebapi_db(object):
         self.root.Delete(result["result"][0], user=user)
         # multiple items list
         self.request.POST = {"items": [{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
-                                                  {"pool_type": "bookmark", "link": u"the link 2", "comment": u"some text"},
-                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}]}
+                                       {"pool_type": "bookmark", "link": u"the link 2", "comment": u"some text"},
+                                       {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}]}
         result = view.newItem()
         self.assert_(len(result["result"])==3)
         self.root.Delete(result["result"][0], user=user)
@@ -131,10 +119,10 @@ class tWebapi_db(object):
         self.assert_(len(result["result"])==0)
         # multiple items list
         self.request.POST = {"items": [{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
-                                                  {"link": u"the link 2", "comment": u"some text"},
-                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}]}
+                                       {"link": u"the link 2", "comment": u"some text"},
+                                       {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}]}
         result = view.newItem()
-        self.assert_(len(result["result"])==0)
+        self.assert_(len(result["result"])==2)
         
         # to many
         self.app.configuration.unlock()
@@ -232,12 +220,8 @@ class tWebapi_db(object):
         self.assert_(o.data.url=="the url new")
         o = self.root.GetObj(result["result"][2])
         self.assert_(o.data.link=="the link new")
-        
+
         # failures
-        # update single
-        self.request.POST = {"link": u"the link new", "comment": u"some text"}
-        result = view.setItem()
-        self.assert_(len(result["result"])==0)
         # update single
         self.request.POST = {"id": str(9999999), "link": u"the link new", "comment": u"some text"}
         result = view.setItem()
@@ -255,7 +239,7 @@ class tWebapi_db(object):
                              {"id": str(o3.id), "link": u"the link new", "comment": u"some text"},
                              ]}
         result = view.setItem()
-        self.assert_(len(result["result"])==0)
+        self.assert_(len(result["result"])==2)
         # no id
         self.request.POST = {"items": [
                              {"id": str(o1.id), "link": u"the link new", "comment": u"some text"},
@@ -263,7 +247,7 @@ class tWebapi_db(object):
                              {"id": str(o3.id), "link": u"the link new", "comment": u"some text"},
                              ]}
         result = view.setItem()
-        self.assert_(len(result["result"])==0)
+        self.assert_(len(result["result"])==2)
         # validation error
         self.request.POST = {"items": [
                              {"id": str(o1.id), "link": u"the link new", "comment": u"some text"},
@@ -271,7 +255,7 @@ class tWebapi_db(object):
                              {"id": str(o3.id), "link": u"the link new", "comment": u"some text"},
                              ]}
         result = view.setItem()
-        self.assert_(len(result["result"])==0)
+        self.assert_(len(result["result"])==2)
 
 
     def test_delete(self):
@@ -288,6 +272,7 @@ class tWebapi_db(object):
         
         # delete single
         self.request.POST = {"id": str(o1.id)}
+        self.request.method = "POST"
         result = view.deleteItem()
         self.assert_(len(result["result"])==1)
         o = self.root.GetObj(o1.id)
@@ -327,13 +312,13 @@ class tWebapi_db(object):
         
         self.request.context = o1
         view = APIv1(o1, self.request)
-        result = view.getContext()
+        result = view.getItem()
         self.assert_(result)
         self.assert_(result["link"]=="the link")
 
         self.request.context = o2
         view = APIv1(o2, self.request)
-        result = view.getContext()
+        result = view.getItem()
         self.assert_(result)
         self.assert_(result["url"]=="the url")
 
@@ -341,14 +326,14 @@ class tWebapi_db(object):
         self.request.context = o1
         view = APIv1(o1, self.request)
         self.request.POST = {"link": u"the link new", "comment": u"some text"}
-        result = view.updateContext()
+        result = view.setItem()
         o = self.root.GetObj(o1.id)
         self.assert_(o.data.link==u"the link new")
 
         self.request.context = o2
         view = APIv1(o2, self.request)
         self.request.POST = {"number": 444}
-        result = view.updateContext()
+        result = view.setItem()
         self.assert_(result.get("error"))
         o = self.root.GetObj(o2.id)
         self.assert_(o.data.number==123)
@@ -659,14 +644,21 @@ class tWebapi_db(object):
         values = view.subtree()
         self.assert_(self.request.response.status.startswith("400"))
 
-        profile = {"descent": ("nive.definitions.IObject",), "fields": {}}
+        profile = {"descent": ("nive.definitions.IContainer",),
+                   "addContext": True}
+        values = view.subtree(profile=profile)
+        self.assert_(values!={})
+        self.assert_(len(values["items"])==2)
+        self.assert_(len(values["items"][0]["items"])==3)
+
+        profile = {"descent": ("nive.definitions.IContainer",),
+                   "parameter": {"pool_type": "bookmark"},
+                   "addContext": True}
         values = view.subtree(profile=profile)
         self.assert_(values!={})
         self.assert_(len(values["items"])==2)
         self.assert_(len(values["items"][0]["items"])==1)
-        self.assert_(values["items"][0]["link"]==u"the link")
-        self.assert_(values["items"][0].get("share")==None)
-                                            
+
         view = APIv1(o1, self.request)
         self.request.POST = {"subtree": "0"}
         values = view.subtree()
@@ -726,12 +718,12 @@ class tWebapi_db(object):
         # no type
         self.request.POST = {"link": u"the link", "comment": u"some text"}
         result = view.newItemForm()
-        self.assertFalse(self.request.response["result"])
+        self.assert_(self.request.response.headers["X-Result"])
 
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"link": u"the link", "comment": u"some text", "create$": "1"}
         result = view.newItemForm()
-        self.assertFalse(self.request.response.headers["X-Result"])
+        self.assert_(self.request.response.headers["X-Result"])
         self.assert_(objs==len(r.GetObjsList(fields=["id"])))
         
         # wrong subset
@@ -741,12 +733,9 @@ class tWebapi_db(object):
         # wrong action
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "unknown$": "1"}
-        try:
-            result = view.newItemForm()
-            self.assert_(False)
-        except ExceptionalResponse, result:
-            self.assert_(self.request.response.headers["X-Result"])
-            self.assert_(objs==len(r.GetObjsList(fields=["id"])))
+        result = view.newItemForm()
+        self.assert_(self.request.response.headers["X-Result"])
+        self.assert_(objs==len(r.GetObjsList(fields=["id"])))
         
         
     def test_setform(self):
@@ -759,20 +748,18 @@ class tWebapi_db(object):
         view = APIv1(o1, self.request)
 
         self.request.POST = {}
-        result = view.updateForm()
+        result = view.setItemForm()
         self.assert_(self.request.response.headers["X-Result"])
 
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"link": u"the new link", "comment": u"some new text", "create$": "1"}
-        try:
-            result = view.updateForm()
-            self.assert_(False)
-        except ExceptionalResponse, result:
-            self.assert_(self.request.response.headers["X-Result"])
-            self.assert_(objs==len(r.GetObjsList(fields=["id"])))
+        result = view.setItemForm()
+        self.assert_(result["content"])
+        self.assert_(self.request.response.headers["X-Result"])
+        self.assert_(objs==len(r.GetObjsList(fields=["id"])))
 
 
-    def test_newformfailures(self):
+    def test_newformfailures2(self):
         user = User(u"test")
         user.groups.append("group:manager")
         r = self.root
@@ -783,12 +770,12 @@ class tWebapi_db(object):
 
         # wrong subset
         self.request.POST = {"subset": "unknown!", "pool_type": "bookmark", "link": u"the link", "comment": u"some text"}
-        self.assertRaises(ConfigurationError, view.updateForm)
+        self.assertRaises(ConfigurationError, view.setItemForm)
 
         # wrong action
         objs=len(r.GetObjsList(fields=["id"]))
         self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "unknown$": "1"}
-        result = view.updateForm()
+        result = view.setItemForm()
         self.assert_(self.request.response.headers["X-Result"])
         self.assert_(objs==len(r.GetObjsList(fields=["id"])))
         

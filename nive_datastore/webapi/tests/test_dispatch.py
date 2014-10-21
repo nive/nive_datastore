@@ -86,17 +86,17 @@ class tWebapiDispatch_db(object):
         self.assert_(len(result["result"])==0)
         # multiple items list
         param = {"items": [{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
-                                                  {"link": u"the link 2", "comment": u"some text"},
-                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}]}
+                           {"link": u"the link 2", "comment": u"some text"},
+                           {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}]}
         result,stat = self.root.dispatch("newItem", **param)
-        self.assert_(len(result["result"])==0)
+        self.assert_(len(result["result"])==2)
         
         # to many
         self.app.configuration.unlock()
-        self.app.configuration.maxStoreItems = 2
+        self.app.configuration.maxStoreItems = 1
         param = {"items": [{"pool_type": "bookmark", "link": u"the link 1", "comment": u"some text"},
-                                                  {"link": u"the link 2", "comment": u"some text"},
-                                                  {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}]}
+                           {"link": u"the link 2", "comment": u"some text"},
+                           {"pool_type": "bookmark", "link": u"the link 3", "comment": u"some text"}]}
         result,stat = self.root.dispatch("newItem", **param)
         self.app.configuration.maxStoreItems = 20
         self.app.configuration.lock()
