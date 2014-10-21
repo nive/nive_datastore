@@ -1089,7 +1089,7 @@ class APIv1(BaseView):
         typeconf = self.context.app.GetObjectConf(typename)
 
         # set up the form
-        form, subset = self._loadForm(self.context, subset, typeconf, viewconf, "newItem")
+        form, subset = self._loadForm(self.context, subset, typeconf, viewconf, "newItem", ItemForm.defaultNewItemAction)
         form.Setup(subset=subset, addTypeField=True)
 
         if self.GetFormValue("assets")=="only":
@@ -1166,7 +1166,7 @@ class APIv1(BaseView):
         typeconf = setObject.configuration
 
         # set up the form
-        form, subset = self._loadForm(setObject, subset, typeconf, viewconf, "setItem")
+        form, subset = self._loadForm(setObject, subset, typeconf, viewconf, "setItem", ItemForm.defaultSetItemAction)
         form.Setup(subset=subset)
 
         if self.GetFormValue("assets")=="only":
@@ -1175,7 +1175,7 @@ class APIv1(BaseView):
             return {"content": form.HTMLHead(ignore=())}
 
         # process and render the form.
-        result, data, action = form.Process(pool_type=typeconf.id)
+        result, data, action = form.Process()
         if IObject.providedBy(result):
             result = result.id
 
@@ -1190,17 +1190,23 @@ class APIv1(BaseView):
         return {"content": data}
 
 
-    def _loadForm(self, forContext, subset, typeconf, viewconf, defaultsubset):
+    def _loadForm(self, forContext, subset, typeconf, viewconf, defaultsubset, defaultaction=None):
         # form rendering settings
         form = ItemForm(view=self, context=forContext, loadFromType=typeconf)
 
         # load subset
+        if subset is None:
+            subset = defaultsubset
         if isinstance(subset, basestring):
             # the subset is referenced as string -> look it up in typeconf.forms
             form.subsets = typeconf.forms
         else:
             form.subsets = {defaultsubset: subset}
             subset = defaultsubset
+
+        # set up action
+        if not "actions" in form.subsets[subset] and defaultaction:
+            form.subsets[subset].update(defaultaction)
 
         # customize form widget. values are applied to form.widget
         form.widget.item_template = "field_onecolumn"
