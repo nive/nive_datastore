@@ -1298,7 +1298,7 @@ class APIv1(BaseView):
 
         return {"id": state["state"].id,
                 "name": state["state"].name,
-                "process": serI(state["process"]),
+                "process": _serI(state["process"]),
                 "transitions": [_serT(t) for t in state["transitions"]],
                 "result": True}
 
@@ -1442,7 +1442,7 @@ def string_renderer_factory(info):
     def _render(value, system):
         if isinstance(value, dict) and "content" in value:
             value = value["content"]
-        elif not isinstance(value, string_types):
+        elif not isinstance(value, basestring):
             value = str(value)
         request = system.get('request')
         if request is not None:
