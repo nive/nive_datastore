@@ -1204,6 +1204,9 @@ class APIv1(BaseView):
             form.subsets = {defaultsubset: subset}
             subset = defaultsubset
 
+        if not subset in form.subsets:
+            raise ConfigurationError("Unknown subset "+subset)
+
         # set up action
         if not "actions" in form.subsets[subset] and defaultaction:
             form.subsets[subset].update(defaultaction)
