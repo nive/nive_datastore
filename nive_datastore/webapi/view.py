@@ -260,7 +260,9 @@ class APIv1(BaseView):
                 attr="newItem",
                 ...
                 settings={"form": {"fields": ("link", "share", "comment")}
-                          "type": "bookmark"}
+                          "type": "bookmark",
+                          "values": {}    # an additional slot for default values
+                }
             )
 
         2) The types' ObjectConf.forms settings for `newItem`  ::
@@ -285,11 +287,13 @@ class APIv1(BaseView):
         """
         # lookup typename and subset
         typename = subset = ""
+        values = None
         # look up the new type and validation fields in custom view definition
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
             typename = viewconf.settings.get("type")
             subset = viewconf.settings.get("subset")
+            values = viewconf.settings.get("values")
         if not subset:
             subset = self.GetFormValue("subset") or "newItem"
 
@@ -380,7 +384,10 @@ class APIv1(BaseView):
                 name="update-bookmark",
                 attr="setItem",
                 ...
-                settings={"form": {"fields": ("link", "share", "comment")}
+                settings={
+                    "form": {"fields": ("link", "share", "comment"),
+                    "values": {}    # an additional slot for values
+                }
             )
 
         2) The types' ObjectConf.forms settings for `setItem`  ::
@@ -402,10 +409,12 @@ class APIv1(BaseView):
         """
         # lookup subset
         subset = ""
+        values = None
         # look up the new type in custom view definition
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
             subset = viewconf.settings.get("subset")
+            values = viewconf.settings.get("values")
         if not subset:
             subset = self.GetFormValue("subset") or "setItem"
 
@@ -428,12 +437,13 @@ class APIv1(BaseView):
             typeconf = setObject.configuration
             form, subset = self._loadForm(setObject, subset, typeconf, viewconf, "setItem")
             form.Setup(subset=subset)
-            result, values, errors = form.ValidateSchema(self.GetFormValues())
+            result, data, errors = form.ValidateSchema(self.GetFormValues())
             if not result:
                 self.request.response.status = u"400 Validation error"
                 return {"error": errors, "result": []}
-
-            result = setObject.Update(data=values, user=self.User())
+            if values is not None:
+                data.update(values)
+            result = setObject.Update(data=data, user=self.User())
             return {"result": result}
 
         response = self.request.response
@@ -451,9 +461,9 @@ class APIv1(BaseView):
         validated = []
         errors = []
         cnt = 0
-        for values in items:
+        for data in items:
             cnt += 1
-            id = values.get("id")
+            id = data.get("id")
             if not id:
                 errors.append("No id given: Item number "+str(cnt))
                 continue
@@ -465,7 +475,7 @@ class APIv1(BaseView):
             typeconf = item.configuration
             form, subset = self._loadForm(item, subset, typeconf, viewconf, "setItem")
             form.Setup(subset=subset)
-            result, values, err = form.ValidateSchema(values)
+            result, data, err = form.ValidateSchema(data)
             if not result:
                 if isinstance(err, list):
                     errors.extend(err)
@@ -475,7 +485,11 @@ class APIv1(BaseView):
 
             if not self.Allowed("api-setItem", item):
                 errors.append("Not allowed: Item id "+str(id))
-            result = item.Update(data=values, user=user)
+                continue
+
+            if values is not None:
+                data.update(values)
+            result = item.Update(data=data, user=user)
             if result:
                 validated.append(id)
 
@@ -1036,7 +1050,9 @@ class APIv1(BaseView):
                 attr="newItemForm",
                 ...
                 settings={"form": {"fields": ("link", "share", "comment"), "use_ajax": True}
-                          "type": "bookmark"}
+                          "type": "bookmark",
+                          "values": {}    # an additional slot for default values
+                }
             )
 
         2) The types' ObjectConf.forms settings for `newItem`  ::
@@ -1068,11 +1084,13 @@ class APIv1(BaseView):
         return the required css and js assets for the specific form only.
         """
         typename = subset = ""
+        values = None
         # look up the new type in custom view definition
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
             typename = viewconf.settings.get("type")
             subset = viewconf.settings.get("form")
+            values = viewconf.settings.get("values")
         else:
             if not subset:
                 subset = self.GetFormValue("subset") or "newItem"
@@ -1097,7 +1115,7 @@ class APIv1(BaseView):
             return {"content": form.HTMLHead(ignore=[a[0] for a in self.configuration.assets])}
 
         # process and render the form.
-        result, data, action = form.Process(pool_type=typename)
+        result, data, action = form.Process(pool_type=typename, values=values)
         if IObject.providedBy(result):
             result = result.id
 
@@ -1127,7 +1145,10 @@ class APIv1(BaseView):
                 name="update-bookmark",
                 attr="setItemForm",
                 ...
-                settings={"form": {"fields": ("link", "share", "comment"), "use_ajax": True}}
+                settings={
+                    "form": {"fields": ("link", "share", "comment"), "use_ajax": True}
+                    "values": {}    # an additional slot for default values
+                }
             )
 
         2) The types' ObjectConf.forms settings for `setItem`  ::
@@ -1154,11 +1175,12 @@ class APIv1(BaseView):
         To get required assets in a seperate call use `?assets=only` as query parameter. This will
         return the required css and js assets for the specific form only.
         """
-        subset = ""
+        values = None
         # look up the new type in custom view definition
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
             subset = viewconf.settings.get("form")
+            values = viewconf.settings.get("values")
         else:
             subset = self.GetFormValue("subset") or "setItem"
 
@@ -1175,7 +1197,7 @@ class APIv1(BaseView):
             return {"content": form.HTMLHead(ignore=())}
 
         # process and render the form.
-        result, data, action = form.Process()
+        result, data, action = form.Process(values=values)
         if IObject.providedBy(result):
             result = result.id
 
