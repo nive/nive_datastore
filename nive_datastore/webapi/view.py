@@ -499,16 +499,59 @@ class APIv1(BaseView):
     def deleteItem(self):
         """
         Delete one or more items.
-        
+
+        For customized views you change the behaviour whether contained objects are removed
+        recursively or not. By default recursive is True.
+
+        You can also turn on strict the mode. If turned on `deleteItem` can only be called for the
+        object to be deleted itself, not for the container.
+
+        1) Customized `deleteItem` view ::
+
+            bookmark = ViewConf(
+                name="delete-bookmark",
+                attr="deleteItem",
+                ...
+                settings={
+                    "strict": True,
+                    "recursive": False
+                }
+            )
+
         Request parameter:
         
-        - id: the items' id or a list of ids
+        - id: the items' id or a list of ids if not `strict=true`
 
         Returns json encoded result: {"result": ids of deleted items}
         """
         response = self.request.response
+        # look up the new type in custom view definition
+        viewconf = self.GetViewConf()
+        strict = False
+        recursive = True
+        if viewconf and viewconf.get("settings"):
+            strict = viewconf.settings.get("strict")
+            recursive = viewconf.settings.get("recursive")
 
-        ids = self.GetFormValue("id")
+        if strict:
+            # delete the context itself
+            user = self.User()
+            obj = self.context
+            if not recursive:
+                sub = self.context.root().Select(parameter={"pool_unitref":obj.id}, fields=["id"], max=2)
+                if sub:
+                    # not empty -> return
+                    return {"result": [], "error": u"Not empty"}
+            id = obj.id
+            result = self.context.parent.Delete(obj, user=user)
+            #del obj
+            if result:
+                return {"result": [id]}
+            return {"result": [], "error": u"Sorry. Delete failed."}
+
+        else:
+            ids = self.GetFormValue("id")
+
         if not ids:
             # set http response code (invalid request)
             response.status = u"400 Empty id"
@@ -518,24 +561,31 @@ class APIv1(BaseView):
             try:
                 ids = [int(ids)]
             except ValueError:
-                ids=None
-        if not ids:
-            # set http response code (invalid request)
-            response.status = u"400 Invalid id"
-            return {"error": u"Invalid id.", "result": []}
+                # set http response code (invalid request)
+                response.status = u"400 Invalid id"
+                return {"error": u"Invalid id.", "result": []}
 
-        user = self.User()
         deleted = []
+        error = u""
+        user = self.User()
+        root = self.context.root()
         for obj in self.context.GetObjsBatch(ids):
             if not self.Allowed("api-delete", obj):
+                error = u"Not allowed"
                 continue
+            if not recursive:
+                sub = root.Select(parameter={"pool_unitref":obj.id}, fields=["id"], max=2)
+                if sub:
+                    # not empty -> continue
+                    error = u"Not empty"
+                    continue
             id = obj.id
             result = self.context.Delete(obj, user=user)
             del obj
             if result:
                 deleted.append(id)
 
-        return {"result": deleted}
+        return {"result": deleted, "error": error}
             
 
     # list and search ----------------------------------------------------------------------------------
@@ -1084,13 +1134,14 @@ class APIv1(BaseView):
         return the required css and js assets for the specific form only.
         """
         typename = subset = ""
-        values = None
+        values = defaults = None
         # look up the new type in custom view definition
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
             typename = viewconf.settings.get("type")
             subset = viewconf.settings.get("form")
             values = viewconf.settings.get("values")
+            defaults = viewconf.settings.get("defaults")
         else:
             if not subset:
                 subset = self.GetFormValue("subset") or "newItem"
@@ -1115,7 +1166,7 @@ class APIv1(BaseView):
             return {"content": form.HTMLHead(ignore=[a[0] for a in self.configuration.assets])}
 
         # process and render the form.
-        result, data, action = form.Process(pool_type=typename, values=values)
+        result, data, action = form.Process(pool_type=typename, defaults=defaults, values=values)
         if IObject.providedBy(result):
             result = result.id
 
@@ -1378,7 +1429,7 @@ class APIv1(BaseView):
 
     # list rendering ------------------------------------------------------------
 
-    def renderListItem(self, values, typename=None, template=None):
+    def renderListItem(self, values, typename=None, template=None, **kw):
         """
         This function renders data records (non object) returned by Select or Search
         functions with the object configuration defined `listing` renderer.
@@ -1422,8 +1473,11 @@ class APIv1(BaseView):
             setattr(self, "_c_listing_"+typename, tmpl)
         else:
             tmpl = getattr(self, "_c_listing_"+typename)
-        values["view"] = self
-        return render(tmpl, values, request=self.request)
+        v2 = {}
+        v2.update(values)
+        v2["options"] = kw
+        v2["view"] = self
+        return render(tmpl, v2, request=self.request)
 
 
 
@@ -1436,10 +1490,10 @@ class ItemForm(ObjectForm):
     """
     actions = [
         Conf(id=u"default",    method="StartFormRequest", name=u"Initialize", hidden=True,  css_class=u""),
-        Conf(id=u"create",     method="CreateObj",        name=u"Submit",     hidden=False, css_class=u"btn btn-primary"),
+        Conf(id=u"create",     method="CreateObj",        name=_(u"Submit"),  hidden=False, css_class=u"btn btn-primary"),
         Conf(id=u"defaultEdit",method="StartObject",      name=u"Initialize", hidden=True,  css_class=u""),
-        Conf(id=u"edit",       method="UpdateObj",        name=u"Save",       hidden=False, css_class=u"btn btn-primary"),
-        Conf(id=u"cancel",     method="Cancel",   name=u"Cancel and discard", hidden=False, css_class=u"btn btn-default")
+        Conf(id=u"edit",       method="UpdateObj",        name=_(u"Save"),    hidden=False, css_class=u"btn btn-primary"),
+        Conf(id=u"cancel",     method="Cancel",   name=_(u"Cancel and discard"),hidden=False, css_class=u"btn btn-default")
     ]
     defaultNewItemAction = {"actions": [u"create"],  "defaultAction": "default"}
     defaultSetItemAction = {"actions": [u"edit"],    "defaultAction": "defaultEdit"}
