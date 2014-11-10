@@ -506,6 +506,10 @@ class APIv1(BaseView):
         You can also turn on strict the mode. If turned on `deleteItem` can only be called for the
         object to be deleted itself, not for the container.
 
+        Another supported option is a confirmation id. If used the item will only be deleted if the
+        confirmation is present in the request. In combination with template renderers you can easily
+        build a confirmation dialog box to get input from the user. By default `confirm` is None.
+
         1) Customized `deleteItem` view ::
 
             bookmark = ViewConf(
@@ -514,7 +518,8 @@ class APIv1(BaseView):
                 ...
                 settings={
                     "strict": True,
-                    "recursive": False
+                    "recursive": False,
+                    "confirm": "g3d4ea8b1"
                 }
             )
 
@@ -529,9 +534,14 @@ class APIv1(BaseView):
         viewconf = self.GetViewConf()
         strict = False
         recursive = True
+        confirmation = None
         if viewconf and viewconf.get("settings"):
             strict = viewconf.settings.get("strict")
             recursive = viewconf.settings.get("recursive")
+            confirmation = viewconf.settings.get("confirmation")
+
+        if confirmation and self.GetFormValue("confirmation")!=confirmation:
+            return {"result": [], "error": u"Please confirm."}
 
         if strict:
             # delete the context itself
@@ -1171,8 +1181,7 @@ class APIv1(BaseView):
             result = result.id
 
         self.AddHeader("X-Result", str(result).lower())
-        subsetdef = form.subsets.get(subset)
-        if subsetdef.get("assets"):
+        if hasattr(form, "assets") and form.assets:
             # if assets are enabled add required js+css for form except those defined
             # in the view modules asset list
             head = form.HTMLHead(ignore=[a[0] for a in self.configuration.assets])
@@ -1253,8 +1262,7 @@ class APIv1(BaseView):
             result = result.id
 
         self.AddHeader("X-Result", str(result).lower())
-        subsetdef = form.subsets.get(subset)
-        if subsetdef.get("assets"):
+        if hasattr(form, "assets") and form.assets:
             # if assets are enabled add required js+css for form except those defined
             # in the view modules asset list
             head = form.HTMLHead(ignore=[a[0] for a in self.configuration.assets])
