@@ -47,7 +47,7 @@ collection2 = ObjectConf("nive_datastore.item",
 
 
 appconf = AppConf("nive_datastore.app",
-    search={"bookmarks":  
+    searchItems={"bookmarks":
                   {"pool_type": "bookmark", 
                    "container": False,
                    "fields": ["id", "link", "comment", "pool_changedby"],

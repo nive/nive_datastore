@@ -8,7 +8,7 @@ import copy
 
 from pyramid.httpexceptions import HTTPForbidden
 from pyramid.security import has_permission
-from pyramid.renderers import render
+from pyramid import renderers
 
 from nive.definitions import ViewModuleConf, ViewConf, Conf, ModuleConf
 from nive.definitions import IObject, IContainer
@@ -110,15 +110,17 @@ localstorage_views = ViewModuleConf(
 )
 
 DefaultMaxStoreItems = 50
-DefaultMaxBatchNumber = 100
+DefaultMaxBatchItems = 100
 jsUndefined = (u"", u"null", u"undefined", None)
 
 # internal data processing ------------------------------------------------------------
 
-def DeserializeItems(view, items, fields):
+def DeserializeItems(view, items, fields, render=()):
     # Convert item objects to dicts before returning to the user
     if not isinstance(items, (list,tuple)):
         items = [items]
+    if render is None:
+        render = ()
 
     ff = fields
     values = []
@@ -136,7 +138,10 @@ def DeserializeItems(view, items, fields):
             raise ConfigurationError, "toJson fields are not defined"
 
         for field in ff:
-            data[field] = item.GetFld(field)
+            if field in render:
+                data[field] = view.RenderField(field, context=item)
+            else:
+                data[field] = item.GetFld(field)
 
         values.append(data)
     return values
@@ -167,50 +172,94 @@ class APIv1(BaseView):
         Returns one or multiple items. This function either returns the current item if called without
         parameter or if `id` is passed as request form value one or multiple child items.
 
-        - id (optional): the items' id or a list of multiple items. leave empty to get the current
-          item
+        **Request parameter:**
 
-        returns json encoded data, child items are wapped in a list
+        - *id*: the items' id or a list of multiple items. leave empty to get the current
+                item. Ignored if `strict` is true.
 
-        The data fields included in the result are rendered based on customized view options or the types'
-        default settings ``toJson`` ::
+        Returns json encoded data
 
-        1) Customized `getItem` view ::
+        **Settings:**
+
+        - *toJson*: (list) fields included in json result. Can be type specific. The data fields included in the result are
+                    rendered based on customized view settings or the types' default `toJson` value.
+        - *render*: (list) list of fields to be rendered before being included in the result. The result depends on the
+                    individual fields. E.g. list fields would be returned as readable name not the raw data value.
+        - *strict*: (bool) If `True` only the single item matching the current url is included in the result.
+        - *maxBatchItems*: (number) the maximum number of returned in one call
+        - *deserialize*: (callback) pluginpoint for a custom deserialization callback. The callback is once for the whole result.
+                         Takes two parameters `items, view` and should return the processed items.
+
+        You can also turn on strict the mode. If turned on `getItem` can only be called for the
+        object to be retrieved itself, not for the container.
+
+        Customized `getItem` view ::
 
             bookmark = ViewConf(
                 name="read-bookmark",
                 attr="getItem",
-                ...
-                settings={"toJson": ("link", "share", "comment")}
+                # ...
+                settings={
+                    "toJson": ("link", "share", "comment"),
+                    "render": ("pool_create",),
+                    "strict": True,
+                }
             )
 
         To define the returned fields of multiple object types use a dict instead of a tuple and use the type id
         as key ::
 
-            {"toJson": {"bookmark": ("link", "share", "comment")}}
+            bookmark = ViewConf(
+                name="read-bookmark",
+                attr="getItem",
+                # ...
+                settings = {
+                    "toJson": {"bookmark": ("link", "share", "comment")},
+                    "strict": False
+                }
+            )
 
-        To mix defaults for multiple types and specific fields for other types use `default__` as key.
+        To mix defaults for multiple types and specific fields for other types use `default__` as key. ::
 
-        2) The types' ObjectConf.forms settings for `newItem`  ::
+            bookmark = ViewConf(
+                name="read-bookmark",
+                attr="getItem",
+                # ...
+                settings = {
+                    "toJson": {
+                        "default__": ("id", "pool_type"),
+                        "bookmark": ("link", "share", "comment") },
+                    "strict": False
+                }
+            )
+
+        The default value for `toJson` is loaded from the types' ObjectConf.toJson settings ::
 
             collection1 = ObjectConf(
                 id = "bookmark",
-                ...
+                #...
                 toJson = ("link", "share", "comment"),
             )
 
-        In both cases each returned json bookmark item contains the values for link, share and comment.
+        In all cases each returned json bookmark item contains the values for `link`, `share` and `comment`.
         """
-        fields = None
+        fields = render = deserialize = None
+        strict = False
+        maxBatchItems = self.context.app.configuration.get("maxBatchItems") or DefaultMaxBatchItems
+
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
             fields = viewconf.settings.get("toJson")
+            strict = viewconf.settings.get("strict", False)
+            render = viewconf.settings.get("render")
+            deserialize = viewconf.settings.get("deserialize")
+            maxBatchItems = viewconf.settings.get("maxBatchItems") or maxBatchItems
 
         # lookup the id in the current form submission. if not none try to load and update the
         # child with id=id
         id = self.GetFormValue("id")
-        if id is None:
-            # return only the single item and
+        if id is None or strict:
+            # return only the single item matching the current url
             item = self.context
             return DeserializeItems(self, item, fields)[0]
 
@@ -228,105 +277,125 @@ class APIv1(BaseView):
             return {"error": u"Empty id"}
 
         items = []
+        cnt = 0
         for obj in self.context.GetObjsBatch(id):
             if not self.Allowed(obj, "api-getItem"):
                 # fails silently in list mode
                 continue
             items.append(obj)
+            if len(items) == maxBatchItems:
+                break
+
         # turn into json
-        return DeserializeItems(self, items, fields)
+        items = DeserializeItems(self, items, fields, render)
+        if callable(deserialize):
+            return deserialize(items, view)
+        return items
 
 
     def newItem(self):
         """
         Creates a single item or a set of items as batch. Values are serialized and
-        validated by the 'newItem' form subset.
+        validated by 'newItem' form subset or the form setup configured for the customized view.
 
-        Request parameter:
+        **Request parameter:**
 
-        - type: the new type to be created. Must be set for each item.
-        - <fields>: A single item can be passed directly as form values without wraping it as `items`
-        - items (optional): One or multiple items to be stored. Multiple items have to be passed as
-          array. Maximum number of 20 items allowed.
+        - *type*: the new type to be created. Must be set for each item.
+        - *<fields>*: A single item can be passed directly as form values without wraping it as `items`.
+        - *items*: One or multiple items to be stored. Multiple items have to be passed as array.
 
         Returns json encoded result: {"result": list of new item ids}
 
-        Validation configuration lookup order :
+        **Settings:**
 
-        1) Customized `newItem` view ::
+        - *type*: (string/tuple) the type id created by the function. If set the type id passed in the request must match
+                  the settings. Use a tuple to allow multiple type ids.
+        - *form*: (dict) form setup for validation settings. If not set the default form setup is loaded from the types'
+                  configuration.
+        - *values*: (dict) a slot for default values not part of the form.
+        - *maxStoreItems*: (number) the maximum number of items stored in one call.
+        - *serialize*: (callback) pluginpoint for a custom serialization callback. The callback is invoked before each item is created.
+                       Takes three parameters `data, typename, view` and should return the processed data dict. If  `ValueError`
+                       is raised the item is skipped and the next is processed.
+
+        Customized `newItem` view example ::
 
             bookmark = ViewConf(
                 name="add-bookmark",
                 attr="newItem",
-                ...
+                # ...
                 settings={"form": {"fields": ("link", "share", "comment")}
                           "type": "bookmark",
-                          "values": {}    # an additional slot for default values
+                          "maxStoreItems": 3,
+                          "values": {"source": "webapi"}
                 }
             )
 
-        2) The types' ObjectConf.forms settings for `newItem`  ::
+        The default `forms` setting is loaded from the types' ObjectConf.forms settings for `newItem` ::
 
             collection1 = ObjectConf(
                 id = "bookmark",
-                ...
+                # ...
                 forms = {
-                    "newItem": {"fields": ("link", "share", "comment"), "use_ajax": True},
-                    "setItem": {"fields": ("link", "share", "comment"), "use_ajax": True}
+                    "newItem": {"fields": ("link", "share", "comment"),
+                                "defaults": {"share": True}},
                 },
-                ...
+                # ...
             )
 
-        defines the `newItem` form in both cases with 3 form fields ::
-
-            "link", "share", "comment"
+        In all examples `newItem` validates and stores 3 form fields: `link, share, comment`.
 
         If you are using the default `newItem` view you have to pass the type id to be
         created by the function as form parameter ``type=bookmark``. If you are using a customized
         view the type can be part of the views options slot ``settings={"type": "bookmark"}``.
         """
-        # lookup typename and subset
-        typename = subset = ""
-        values = None
+        # lookup settings
+        typename = u""
+        values = serialize = None
+        subset = u"newItem"
+        maxStoreItems = self.context.app.configuration.get("maxStoreItems") or DefaultMaxStoreItems
+
         # look up the new type and validation fields in custom view definition
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
             typename = viewconf.settings.get("type")
-            subset = viewconf.settings.get("subset")
             values = viewconf.settings.get("values")
-        if not subset:
-            subset = self.GetFormValue("subset") or "newItem"
+            serialize = viewconf.settings.get("serialize")
+            subset = viewconf.settings.get("subset") or subset
+            maxStoreItems = viewconf.settings.get("maxStoreItems") or maxStoreItems
 
+        user = self.User()
         response = self.request.response
         items = self.GetFormValue("items")
         if not items:
             # create a single item
-            values = self.GetFormValues()
+            data = self.GetFormValues()
             if not typename:
-                typename = values.get("type") or values.get("pool_type")
+                typename = data.get(u"type") or data.get(u"pool_type")
                 if not typename:
                     response.status = u"400 No type given"
-                    return {"error": "No type given", "result":[]}
+                    return {"error": u"No type given", "result":[]}
             typeconf = self.context.app.GetObjectConf(typename)
             if not typeconf:
                 response.status = u"400 Unknown type"
-                return {"error": "Unknown type", "result":[]}
+                return {"error": u"Unknown type", "result":[]}
 
-            form, subset = self._loadForm(self.context, subset, typeconf, viewconf, "newItem")
+            form, subset = self._loadForm(self.context, subset, typeconf, viewconf, u"newItem")
             form.Setup(subset=subset)
-            result, values, errors = form.ValidateSchema(values)
+            result, data, errors = form.ValidateSchema(data)
             if not result:
                 response.status = u"400 Validation error"
                 return {"error": str(errors), "result":[]}
 
             #values = SerializeItem(self, values, typeconf)
-            item = self.context.Create(typename, data=values, user=self.User())
+            if isinstance(values, dict):
+                data.update(values)
+            item = self.context.Create(typename, data=data, user=user)
             if not item:
                 response.status = u"400 Validation error"
-                return {"error": "Validation error", "result":[]}
+                return {"error": u"Validation error", "result":[]}
             return {"result": [item.id]}
 
-        maxStoreItems = self.context.app.configuration.get("maxStoreItems") or DefaultMaxStoreItems
         if len(items) > maxStoreItems:
             response.status = u"413 Too many items"
             return {"error": u"Too many items.", "result":[]}
@@ -334,21 +403,28 @@ class APIv1(BaseView):
         validated = []
         errors = []
         cnt = 0
-        for values in items:
+        for data in items:
             cnt += 1
-            tn = typename or values.get("type") or values.get("pool_type")
+            if isinstance(typename, (list, tuple)):
+                tn = data.get(u"type") or data.get(u"pool_type")
+                if not tn in typename:
+                    errors.append(u"Invalid type: "+tn)
+                    continue
+            else:
+                tn = typename or data.get(u"type") or data.get(u"pool_type")
+
             if not tn:
-                errors.append("No type given: Item number "+str(cnt))
+                errors.append(u"No type given: "+str(cnt))
                 continue
 
             typeconf = self.context.app.GetObjectConf(tn)
             if not typeconf:
-                errors.append("Unknown type")
+                errors.append(u"Unknown type")
                 continue
 
-            form, subset = self._loadForm(self.context, subset, typeconf, viewconf, "newItem")
+            form, subset = self._loadForm(self.context, subset, typeconf, viewconf, u"newItem")
             form.Setup(subset=subset)
-            result, values, err = form.ValidateSchema(values)
+            result, data, err = form.ValidateSchema(data)
             if not result:
                 if isinstance(err, list):
                     errors.extend(err)
@@ -356,7 +432,14 @@ class APIv1(BaseView):
                     errors.append(str(err))
                 continue
 
-            item = self.context.Create(tn, data=values, user=self.User())
+            if isinstance(values, dict):
+                data.update(values)
+            if callable(serialize):
+                try:
+                    data = serialize(data, tn, self)
+                except ValueError:
+                    continue
+            item = self.context.Create(tn, data=data, user=user)
             if item:
                 validated.append(item.id)
 
@@ -366,73 +449,87 @@ class APIv1(BaseView):
     def setItem(self):
         """
         Store a single item or a set of items as batch. Values are serialized and
-        validated by 'setItem' form subset. If not set, all fields are allowed. 
+        validated by 'setItem' form subset or the form setup configured for the customized view.
+
+        **Request parameter:**
         
-        Request parameter:
-        
-        - <fields>: A single item can be passed as form values.
-        - items (optional): One or multiple items to be stored. Multiple items have to be passed as 
-          array. Maximum number of 20 items allowed.
+        - *<fields>*: A single item can be passed as form values.
+        - *items*: One or multiple items to be stored. Multiple items have to be passed as array.
           
         Returns json encoded result: {"result": list of stored item ids}
 
-        Validation configuration lookup order :
+        **Settings:**
 
-        1) Customized `setItem` view ::
+        - *strict*: (bool) If `True` only the single item matching the current url will be updated.
+        - *form*: (dict) form setup for validation settings. If not set the default form setup is loaded from the types'
+                  configuration.
+        - *values*: (dict) a slot for default values not part of the form
+        - *maxStoreItems*: (number) the maximum number of items store in one call
+        - *serialize*: (callable) pluginpoint for a custom serialization callback. The callback is invoked before each item is created.
+                       Takes three parameters `data, typename, view` and should return the processed data dict.
+
+        You can also turn on strict the mode. If turned on `setItem` can only be called for the
+        object to be updated itself, not for the container.
+
+        Customized `setItem` view ::
 
             bookmark = ViewConf(
                 name="update-bookmark",
                 attr="setItem",
                 ...
-                settings={
+                settings = {
                     "form": {"fields": ("link", "share", "comment"),
-                    "values": {}    # an additional slot for values
+                             "defaults": {"share": True}},
+                    "strict": True
                 }
             )
 
-        2) The types' ObjectConf.forms settings for `setItem`  ::
+        The default `forms` setting is loaded from the types' ObjectConf.forms settings for `setItem` ::
 
             collection1 = ObjectConf(
                 id = "bookmark",
-                ...
+                # ...
                 forms = {
-                    "newItem": {"fields": ("link", "share", "comment"), "use_ajax": True},
-                    "setItem": {"fields": ("link", "share", "comment"), "use_ajax": True}
+                    "setItem": {"fields": ("link", "share", "comment")},
                 },
-                ...
+                # ...
             )
 
-        defines the `setItem` form in both cases with 3 form fields ::
-
-            "link", "share", "comment"
-
+        In all examples `setItem` validates and stores 3 form fields: `link, share, comment`.
         """
         # lookup subset
-        subset = ""
-        values = None
+        values = serialize = None
+        strict = False
+        subset = "setItem"
+        maxStoreItems = self.context.app.configuration.get("maxStoreItems") or DefaultMaxStoreItems
+
         # look up the new type in custom view definition
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
-            subset = viewconf.settings.get("subset")
             values = viewconf.settings.get("values")
-        if not subset:
-            subset = self.GetFormValue("subset") or "setItem"
+            serialize = viewconf.settings.get("serialize")
+            strict = viewconf.settings.get("strict")
+            subset = viewconf.settings.get("subset") or subset
+            maxStoreItems = viewconf.settings.get("maxStoreItems") or maxStoreItems
+
 
         items = self.GetFormValue("items")
-        if items is None:
-            # lookup id in form values
-            id = self.GetFormValue("id")
-            if id:
-                setObject = self.context.obj(id)
-                if not setObject:
-                    self.request.response.status = u"404 Not found"
-                    return {"error": u"Not found", "result": []}
-                if not self.Allowed("api-setItem", setObject):
-                    self.request.response.status = u"403 Not allowed"
-                    return {"error": u"Not allowed", "result": []}
-            else:
-                # store data in current context itself
+        if strict or items is None:
+            if strict:
                 setObject = self.context
+            else:
+                # lookup id in form values
+                id = self.GetFormValue("id")
+                if id:
+                    setObject = self.context.obj(id)
+                else:
+                    setObject = self.context
+            if not setObject:
+                self.request.response.status = u"404 Not found"
+                return {"error": u"Not found", "result": []}
+            if not self.Allowed("api-setItem", setObject):
+                self.request.response.status = u"403 Not allowed"
+                return {"error": u"Not allowed", "result": []}
 
             typeconf = setObject.configuration
             form, subset = self._loadForm(setObject, subset, typeconf, viewconf, "setItem")
@@ -441,8 +538,12 @@ class APIv1(BaseView):
             if not result:
                 self.request.response.status = u"400 Validation error"
                 return {"error": errors, "result": []}
+            # update configured values
             if values is not None:
                 data.update(values)
+            # callback if set
+            if callable(serialize):
+                data = serialize(data, tn, self)
             result = setObject.Update(data=data, user=self.User())
             return {"result": result}
 
@@ -453,7 +554,6 @@ class APIv1(BaseView):
             response.status = u"400 Validation error"
             return {"error": u"items: Not a list", "result": []}
 
-        maxStoreItems = self.context.app.configuration.get("maxStoreItems") or DefaultMaxStoreItems
         if len(items) > maxStoreItems:
             response.status = u"413 Too many items"
             return {"error": u"Too many items.", "result": []}
@@ -510,35 +610,52 @@ class APIv1(BaseView):
         confirmation is present in the request. In combination with template renderers you can easily
         build a confirmation dialog box to get input from the user. By default `confirm` is None.
 
+        **Request parameter:**
+
+        - *id*: (number,list) the items' id or a list of ids if `strict` is set to `False`
+        - *confirmation*: the confirmation token if enabled.
+
+        Returns json encoded result: {"result": list of deleted item ids}
+
+        **Settings:**
+
+        - *strict*: (bool) If `True` only the single item matching the current url will be updated.
+        - *recursive*: (bool) If `False` deleteItem will not remove container items havng children.
+        - *confirmation*: (string) a confirmation token required to be passed in the request.
+        - *maxDeleteItems*: (number) the maximum number of items deleted in one call. Recursively deleted
+                            items are not counted.
+
+        You can also turn on strict the mode. If turned on `setItem` can only be called for the
+        object to be updated itself, not for the container.
+
         1) Customized `deleteItem` view ::
 
             bookmark = ViewConf(
                 name="delete-bookmark",
                 attr="deleteItem",
                 ...
-                settings={
+                settings = {
                     "strict": True,
                     "recursive": False,
-                    "confirm": "g3d4ea8b1"
+                    "confirm": "g3d4ea8b1",
+                    "maxDeleteItems": 3
                 }
             )
 
-        Request parameter:
-        
-        - id: the items' id or a list of ids if not `strict=true`
-
-        Returns json encoded result: {"result": ids of deleted items}
         """
         response = self.request.response
-        # look up the new type in custom view definition
-        viewconf = self.GetViewConf()
+        maxStoreItems = self.context.app.configuration.get("maxStoreItems") or DefaultMaxStoreItems
         strict = False
         recursive = True
         confirmation = None
+
+        # look up the new type in custom view definition
+        viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
             strict = viewconf.settings.get("strict")
             recursive = viewconf.settings.get("recursive")
             confirmation = viewconf.settings.get("confirmation")
+            maxStoreItems = viewconf.settings.get("maxDeleteItems") or maxStoreItems
 
         if confirmation and self.GetFormValue("confirmation")!=confirmation:
             return {"result": [], "error": u"Please confirm."}
@@ -575,6 +692,10 @@ class APIv1(BaseView):
                 response.status = u"400 Invalid id"
                 return {"error": u"Invalid id.", "result": []}
 
+        if len(ids) > maxStoreItems:
+            response.status = u"413 Too many items"
+            return {"error": u"Too many items.", "result": []}
+
         deleted = []
         error = u""
         user = self.User()
@@ -603,25 +724,59 @@ class APIv1(BaseView):
     def listItems(self):
         """
         Returns a list of batched items for a single or all types stored in the current container.
-        The result only includes the items ids. For a complete list of values use `subtree` or `searchItems`.
+        Fast and efficient listing function. `listItems` uses the access permissions of the container and
+        does not check access permissions for items included in the result.
+        The result can only inlcude meta layer fields and type fields for a single type.
 
-        Request parameter:
+        For an advanced listing function use `subtree` or `searchItems`.
 
-        - type (optional): the items type identifier
-        - sort (optional): sort field. a meta field or if type is not empty, one of the types fields.
-        - order (optional): '<','>'. order the result list based on values ascending '<' or descending '>'
-        - size (optional): number of batched items. maximum is 100.
-        - start (optional): start number of batched result sets.
+        **Request parameter:**
 
-        Returns json encoded result set: {"items":[item ids], "start":number}
+        - *sort*: sort field. a meta field or if type is not empty, one of the types fields.
+        - *order*: '<','>'. order the result list based on values ascending '<' or descending '>'
+        - *size*: number of batched items. maximum is 100.
+        - *start*: start number of batched result sets.
+
+        Returns json encoded result set: {"items":[[item values], [item values]], "start":number}
+
+        **Settings:**
+
+        - *type*: (string) the type id to load data fields from. Can be empty if only meta fields are included
+                  in the result.
+        - *fields*: (list) fields included in json result. Either meta layer field ids or type specific fields
+                    for a single type.
+        - *maxBatchItems*: (number) the maximum number of returned in one call
+        - *deserialize*: (callback) pluginpoint for a custom deserialization callback. The callback is invoked once for
+                         the whole result.
+                         Takes two parameters `items, view` and should return the processed items.
+
+        Customized `listItems` view ::
+
+            bookmark = ViewConf(
+                name="list-bookmark",
+                attr="listItems",
+                ...
+                settings = {
+                    "fields": ("link", "share", "comment", "pool_create"),
+                    "type": "bookmark"
+                }
+            )
+
+
         """
         response = self.request.response
-
-        # process owner mode
-        user = self.User()
+        typename = deserialize = None
+        maxBatchItems = self.context.app.configuration.get("maxBatchItems") or DefaultMaxBatchItems
+        fields = (u"id",)
+        viewconf = self.GetViewConf()
+        if viewconf and viewconf.get("settings"):
+            fields = viewconf.settings.get("fields") or fields
+            typename = viewconf.settings.get("type")
+            deserialize = viewconf.settings.get("deserialize")
+            maxBatchItems = viewconf.settings.get("maxBatchItems") or maxBatchItems
 
         values = self.GetFormValues()
-        type = values.get("type") or values.get("pool_type")
+        typename = typename or values.get("type") or values.get("pool_type")
 
         try:
             start = ExtractJSValue(values, u"start", 0, "int")
@@ -631,10 +786,9 @@ class APIv1(BaseView):
             return {"error": "Invalid parameter: start", "items": []}
 
         try:
-            size = ExtractJSValue(values, u"size", 20, "int")
-            maxBatchNumber = self.context.app.configuration.get("maxBatchNumber") or DefaultMaxBatchNumber
-            if size > maxBatchNumber:
-                size = maxBatchNumber
+            size = ExtractJSValue(values, u"size", maxBatchItems, "int")
+            if size > maxBatchItems:
+                size = maxBatchItems
         except ValueError:
             # set http response code (invalid request)
             response.status = u"400 Invalid parameter"
@@ -648,160 +802,199 @@ class APIv1(BaseView):
 
         sort = values.get("sort",None)
         if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds()]:
-            if type:
-                if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(type)]:
+            if typename:
+                if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(typename)]:
                     sort = None
 
         parameter = {"pool_unitref": self.context.id}
-        result = self.context.dataroot.Select(type, parameter=parameter, fields=["id"], start=start, max=size, ascending=ascending, sort=sort)
-        ids = [v[0] for v in result]
-        result = {"items": ids, "start": start}
-        return result
+        data = self.context.dataroot.Select(typename,
+                                              parameter=parameter,
+                                              fields=fields,
+                                              start=start,
+                                              max=size,
+                                              ascending=ascending,
+                                              sort=sort)
+        if callable(deserialize):
+            data = deserialize(data, view)
+        return {"items": data, "start": start}
 
 
-    def searchItems(self, profile=None):
+    def searchItems(self):
         """
-        Returns a list of batched items for a single or multiple keys.
-        Search profiles can be preconfigured and stored in the datastore application
-        configuration as (see `nive.search` for a full list of keyword options and
-        usage) ::
+        Advanced search functions with many optionsand support for preconfigured search
+        profiles. The functions returns a set of batched items encoded as json.
 
-            # search profile values
-            {
-                "type": "profile",
-                "container": True,
-                "fields": ["id", "name", "slogan"],
-                "parameter": {"public": True, "pool_state": True},
+        Search profiles can be preconfigured and stored in the datastore application configuration or
+        for each customized view.
+
+        **Request parameter**
+
+        - *profile*: (string) the search profile name if not set in the configuration.
+
+        All other values extracted from the request and used in the search as parameter or batching, sort, order have to be
+        defined in the configuration as `settings["dynamic"] = {}` values.
+
+        **Return value**
+
+        - *items*: list of items
+        - *start*: if batched the current start number
+        - *size*: maximum batch size
+        - *total*: number of items in total
+
+        The return value is based on the linked renderer. By default the result is returned as json
+        encoded result set: ::
+
+            {"items":[items], "start":number, "size":number, "total":number}
+
+        **Settings:**
+
+        - *sort*: (string) is a field name and used to sort the result.
+        - *order*: (string) either '<','>' or empty. Orders the result list based on values ascending '<' or descending '>'
+        - *size*: (number) number of batched items.
+        - *start*: (number) start number of batched result sets.
+        - *type*: (string) type id. If ``type`` is not empty this function uses `nive.search.SearchType`, if empty `nive.search.Search`.
+                  The data fields to be included in the result have to be assigned respectively. In other words
+                  if `type` is given the types data fields can be included in the result, otherwise not.
+        - *container*: (bool) determines whether to search in the current container or search all items in the tree.
+        - *fields*: (list) a list of data fields to be included in the result set. See `nive.search`.
+        - *parameter*: (dict/callback) is a dictionary or callable of fixed query parameters used in the select statement. These values cannot
+                       be changed through request form values. The callback takes two parameters `context` and `request` and should return
+                       a dictionary. E.g. ::
+
+                           def makeParam(context, request):
+                               return {"id": context.id}
+
+                           settings = {
+                               # ...
+                               # adds the contexts file as parameter
+                               "parameter": makeParam,
+                               # ...
+                           }
+
+                       or as inline function definition ::
+
+                           settings = {
+                               # ...
+                               # adds the contexts file as parameter
+                               "parameter": lambda context, request, view: {"id": context.id},
+                               # ...
+                           }
+
+        - *dynamic*: (dict) these values values are extracted from the request. The values listed here are the defaults
+                     if not found in the request. The `dynamic` values are mixed with the fixed parameters and passed to the query.
+        - *operators*: (dict) fieldname:operator entries used for search conditions. See `nive.search`.
+        - *ignoreEmpty*: (bool) automatically removes empty dynamic values and so these are not included in select statements.
+        - *advanced*: (dict) search options like group restraints. See `nive.search` for details and all supported options.
+        - *groups*: (string/list) use the groups defintion to restrict the execution to users assigned to one of the groups.
+                    For customized views it is recommended to use the view permissions directly.
+
+        Here is a simple example how to search for all bookmarks ::
+
+            settings = {
+                "type": "bookmark",
+                "container": False,
+                "fields": ["id", "link", "comment"],
+                "parameter": {"share": True},
                 "dynamic": {"start": 0},
-                "operators": {},
                 "sort": "pool_change",
                 "order": "<",
                 "size": 30,
-                "start": 0,
-                "advanced": {}
+            }
+
+        The same example extended with text search in comment. This one allows you to pass in a text matched against
+        the comment field of each bookmark ::
+
+            settings = {
+                "type": "bookmark",
+                "container": False,
+                "fields": ["id", "link", "comment"],
+                "parameter": {"share": True},
+                "dynamic": {"start": 0, "text": ""},
+                "operators": {"text": "LIKE"},
+                "sort": "pool_change",
+                "order": "<",
+                "size": 30,
             }
 
         The system provides two options to configure search profiles. The first one uses the application configuration ::
 
-            appconf.search = {
-                # the default profile if no name is given
-                "default": {
-                    # profile values go here
-                },
-                "extended": {
-                    # profile values go here
-                },
-            }
+            datastore = AppConf(
+                searchItems = {
+                    # the default profile if no name is given
+                    "default": {
+                        # profile values go here
+                    },
+                    "extended": {
+                        # profile values go here
+                    },
+                }
+            )
 
         To use the `extended` profile pass the profiles name as query parameter
         e.g. `http://myapp.com/storage/searchItems?profile=extended`. This way searchItems will always return json.
 
         The second option is to add a custom view based on `searchItems`. This way you can add a custom renderer,
-        view name and permissions::
+        view name and permissions ::
 
-            ViewConf(
+            search = ViewConf(
                 name="list",
                 attr="searchItems",
                 context="nive_datastore.root.root",
                 permission="view",
                 renderer="myapp:templates/list.pt",
-                settings={
-                    # profile values go here
+                settings = {
+                    # search profile values go here
                 }
             )
 
-        See `application configuration` how to include the view.
-
-        Options:
-
-        If ``type`` is not empty this function uses `nive.search.SearchType`, if empty `nive.search.Search`.
-        The data fields to be included in the result have to be assigned respectively. In other words
-        if `type` is given the types data fields can be included in the result, otherwise not.
-
-        ``container`` determines whether to search in the current container or search all items in the tree.
-
-        ``fields`` a list of data fields to be included in the result set. See `nive.search`.
-
-        ``parameter`` is a dictionary or callable of fixed query parameters used in the select statement. These values cannot
-        be changed through request form values. The callback takes two parameters `context` and `request` and should return
-        a dictionary. E.g. ::
-
-            def makeParam(context, request):
-                return {"id": context.id}
-
-            {   ...
-                # adds the contexts file as parameter
-                "parameter": makeParam,
-                ...
-            }
-
-        or as inline function definition ::
-
-            {   ...
-                # adds the contexts file as parameter
-                "parameter": lambda context, request, view: {"id": context.id},
-                ...
-            }
-
-
-
-        ``dynamic`` these values values are extracted from the request. The values listed here are the defaults
-        if not found in the request. The `dynamic` values are mixed with the fixed parameters and passed to the query.
-
-        ``operators`` fieldname:operator entries used for search conditions. See `nive.search`.
-
-        ``sort`` is a field name and used to sort the result.
-        ``order`` either '<','>' or empty. Orders the result list based on values ascending '<' or descending '>'
-        ``size`` number of batched items.
-        ``start`` start number of batched result sets.
-
-        ``advanced`` search options like group restraints. See `nive.search` for details.
-
-        Result:
-
-        The return value is based on the linked renderer. By default the result is returned as json
-        encoded result set: ::
-
-            `{"items":[items], "start":number, "size":number, "total":number}`
-
         """
         response = self.request.response
-        if not profile:
-            # look up the profile in two places
+        profile = None
+        maxBatchItems = self.context.app.configuration.get("maxBatchItems") or DefaultMaxBatchItems
+
+        viewconf = self.GetViewConf()
+        # look up the profile in two places
+        if viewconf and viewconf.get("settings"):
+            maxBatchItems = viewconf.settings.get("maxBatchItems") or maxBatchItems
             # 1) in custom view definition
-            viewconf = self.GetViewConf()
-            if viewconf and viewconf.get("settings"):
-                profile = viewconf.settings
-            else:
-                # 2) in app.configuration.search
-                profiles = self.context.app.configuration.get("search")
-                if not profiles:
-                    response.status = u"400 No search profiles found"
-                    return {"error": "No search profiles found", "items":[]}
+            profile = viewconf.settings
 
-                profilename = self.GetFormValue("profile", u"default")
-                if not profilename:
-                    response.status = u"400 Empty search profile name"
-                    return {"error": "Empty search profile name", "items":[]}
-                profile = profiles.get(profilename)
-                if not profile:
-                    response.status = u"400 Unknown profile"
-                    return {"error": "Unknown profile", "items":[]}
+        else:
+            # 2) in app.configuration.search
+            profiles = self.context.app.configuration.get("searchItems")
+            if not profiles:
+                response.status = u"400 No search profiles found"
+                return {"error": "No search profiles found", "items":[]}
 
-            if profile.get("groups"):
-                grps = profile.get("groups")
-                user = self.User()
-                #TODO check local groups
-                if not user or not user.InGroups(grps):
-                    raise HTTPForbidden, "Profile not allowed"
+            profilename = self.GetFormValue("profile", u"default")
+            if not profilename:
+                response.status = u"400 Empty search profile name"
+                return {"error": "Empty search profile name", "items":[]}
+            profile = profiles.get(profilename)
+            if not profile:
+                response.status = u"400 Unknown profile"
+                return {"error": "Unknown profile", "items":[]}
+
+        if profile.get("groups"):
+            grps = profile.get("groups")
+            user = self.User()
+            #TODO check local groups
+            if not user or not user.InGroups(grps):
+                raise HTTPForbidden, "Profile not allowed"
 
         # get dynamic values
         values = {}
         web = self.GetFormValues()
         dynamic = profile.get("dynamic", {})
         if dynamic:
+            ie = profile.get("ignoreEmpty")
+            # values treated as empty
+            null = (u"", None)
             for dynfield, dynvalue in dynamic.items():
-                values[dynfield] = web.get(dynfield, dynvalue)
+                value = web.get(dynfield, dynvalue)
+                if value in null:
+                    continue
+                values[dynfield] = value
 
         if u"start" in dynamic:
             try:
@@ -816,17 +1009,16 @@ class APIv1(BaseView):
 
         if u"size" in dynamic:
             try:
-                size = ExtractJSValue(values, u"size", 50, "int")
-                maxBatchNumber = self.context.app.configuration.get("maxBatchNumber") or DefaultMaxBatchNumber
-                if size > maxBatchNumber:
-                    size = maxBatchNumber
+                size = ExtractJSValue(values, u"size", maxBatchItems, "int")
+                if size > maxBatchItems:
+                    size = maxBatchItems
             except ValueError:
                 # set http response code (invalid request)
                 response.status = u"400 Invalid parameter"
                 return {"error": "Invalid parameter: size", "items":[]}
             del values[u"size"]
         else:
-            size = profile.get("size", self.context.app.configuration.get("maxBatchNumber") or DefaultMaxBatchNumber)
+            size = profile.get("size", maxBatchItems)
 
         if u"order" in dynamic:
             order = values.get("order",None)
@@ -896,15 +1088,36 @@ class APIv1(BaseView):
 
     # tree renderer ----------------------------------------------------------------------------------
 
-    def subtree(self, profile=None):
+    def subtree(self):
         """
-        Returns complex results like parts of a subtree including several levels. Contained items
+        Returns complex results like parts of a subtree including multiple levels. Contained items
         can be accessed through `items` in the result. `subtree` uses the items configuration
-        `render` option to determine the result values rendered in a json document.
-        If `render` is None the item will not be rendered at all.
+        `render` option to determine the result values rendered in a json document. If `render` is None the item will
+        not be rendered at all.
 
-            # subtree profile values
-            {
+        **Request parameter**
+
+        - *profile*: (string) the subtree profile name if not set in the configuration.
+
+        **Return values**
+
+        The return value is based on the linked renderer. By default the result is returned as json
+        encoded result set: ::
+
+            {"items": {"items": {<values>}, <values>}, <values>}
+
+        **Settings**
+
+        - *levels*: (number) the number of levels to include, 0=include all (default)
+        - *secure*: (bool) if true the `api-subtree` permission is checked for each item
+        - *descent*: (item type, interface) item types or interfaces to descent into subtree e.g. `(IContainer,)`
+        - *toJson*: (dict or tuple) result values. If empty uses the types `toJson` defaults
+        - *parameter*: (dict) query parameter for result selection e.g. `{"pool_state": 1}`
+        - *addContext*: (bool) adds the item object as `context` to the result
+
+        A simple configuration looks as follows ::
+
+            settings = {
                 "levels": 0,
                 "descent": (IContainer,),
                 "toJson": {"bookmark": ("comment", share")},
@@ -913,15 +1126,17 @@ class APIv1(BaseView):
 
         The system provides two options to configure subtree profiles. The first one uses the application configuration ::
 
-            appconf.subtree = {
-                # the default profile if no name is given
-                "default": {
-                    # profile values go here
-                },
-                "extended": {
-                    # profile values go here
-                },
-            }
+            datastore = AppConf(
+                subtree = {
+                    # the default profile if no name is given
+                    "default": {
+                        # profile values go here
+                    },
+                    "extended": {
+                        # profile values go here
+                    },
+                }
+            )
 
         To use the `extended` profile pass the profiles name as query parameter
         e.g. `http://myapp.com/storage/subtree?profile=extended`. In this case `subtree()` will always return json.
@@ -929,67 +1144,47 @@ class APIv1(BaseView):
         The second option is to add a custom view based on `subtree`. This way you can add a custom renderer,
         view name and permissions::
 
-            ViewConf(
+            subtree = ViewConf(
                 name="tree",
                 attr="subtree",
                 context="nive_datastore.root.root",
                 permission="view",
                 renderer="myapp:templates/tree.pt",
                 settings={
-                    # profile values go here
+                    # subtree profile values go here
                 }
             )
 
-        See `application configuration` how to include the view.
-
-        To define the returned fields of multiple object types use a dict and use the type id
-        as key ::
-
-            {"toJson": {"bookmark": ("link", "share", "comment")}}
-
-        Options:
-
-        ``levels`` (default 0) the number of levels to include, 0=include all
-
-        ``descent`` e.g. `(IContainer,)` item types or interfaces to descent into subtree
-        ``toJson`` dict or tuple: result values. If empty uses the types `toJson` defaults
-        ``parameter`` query parameter for result selection e.g. `{"pool_state": 1}`
-
-        Result:
-
-        The return value is based on the linked renderer. By default the result is returned as json
-        encoded result set: ::
-
-            `{"items":{"items": {<values>}, <values>}, <values>}`
-
         """
-        if not profile:
+
+        profile = None
+        viewconf = self.GetViewConf()
+
+        if viewconf and viewconf.get("settings"):
             # look up the profile in two places
             # 1) in custom view definition
-            viewconf = self.GetViewConf()
-            if viewconf and viewconf.get("settings"):
-                profile = viewconf.settings
-            else:
-                # 2) in app.configuration.search
-                def returnError(error, status):
-                    #data = json.dumps(error)
-                    #return self.SendResponse(data, mime="application/json", raiseException=False, status=status)
-                    self.request.response.status = status
-                    return error
+            profile = viewconf.settings
+        else:
+            # 2) in app.configuration.search
+            def returnError(error, status):
+                #data = json.dumps(error)
+                #return self.SendResponse(data, mime="application/json", raiseException=False, status=status)
+                self.request.response.status = status
+                return error
 
-                profiles = self.context.app.configuration.get("subtree")
-                if not profiles:
-                    status = u"400 No subtree profile found"
-                    return returnError({"error": "No subtree profile found"}, status)
+            profiles = self.context.app.configuration.get("subtree")
+            if not profiles:
+                status = u"400 No subtree profile found"
+                return returnError({"error": "No subtree profile found"}, status)
 
-                profilename = self.GetFormValue("profile") or self.context.app.configuration.get("defaultSubtree")
-                if not profilename:
-                    status = u"400 Empty subtree profile name"
-                    return returnError({"error": "Empty subtree profile name"}, status)
-                profile = profiles.get(profilename)
-                if not profile:
-                    status = u"400 Unknown profile"
-                    return returnError({"error": "Unknown profile"}, status)
+            profilename = self.GetFormValue("profile") or self.context.app.configuration.get("defaultSubtree")
+            if not profilename:
+                status = u"400 Empty subtree profile name"
+                return returnError({"error": "Empty subtree profile name"}, status)
+            profile = profiles.get(profilename)
+            if not profile:
+                status = u"400 Unknown profile"
+                return returnError({"error": "Unknown profile"}, status)
 
         if isinstance(profile, dict):
             profile = Conf(**profile)
@@ -1096,22 +1291,52 @@ class APIv1(BaseView):
 
     def newItemForm(self):
         """
-        Renders and executes a web form based on the items configuration values. 
-        Form form setup `pool_type` and `subset` are required. If subset is not 
-        given it defaults to `newItem`. `subset` is the form identifier used in
-        the items configuration as `form`. 
+        Renders and executes a web form based on the configured form setup. All form validation and processing is handled
+        automatically and if the processing succeeds the new item will be stored with the values submitted.
 
-        Form configuration lookup order :
+        The form setup requires the items type either passed in the request or configured as part of the settings.
+
+        **Request parameter**
+
+        - *assets*: You can call `newItemForm?assets=only` to get the required css, js assets only. The form
+                    iteself will not be processed. Use this in combination with `settings["form"]["assets"] = False`
+                    for single page applications or to load assets only once.
+
+        **Return values**
+
+        - *body*: This function returns rendered html code as body.
+        - *X-Result header*: http header indicating whether the new item has been created or not.
+
+        **Settings**
+
+        - *type*: (string) type id of new item to be created. if empty type is extracted from request.
+        - *form*: (dict/string) the form setup as form definition including form fields and options or the subset
+                  to be loaded from the types configuration settings. This slot supports all `nive.HTMLForm` options
+        - *values*: (dict) additional values used for the new item. These values are independent from fields or
+                    form defaults.
+
+        For example the configuration for a new item form might loook like ::
+
+            settings = {
+                "form": {"fields": ("link", "share", "comment"),
+                         "use_ajax": True,
+                         "assets": False}
+                "type": "bookmark",
+                "values": {"source": "webform"}
+            }
+
+        Configuration lookup order :
 
         1) Customized `newItemForm` view ::
 
             bookmark = ViewConf(
                 name="add-bookmark",
                 attr="newItemForm",
-                ...
-                settings={"form": {"fields": ("link", "share", "comment"), "use_ajax": True}
+                # ...
+                settings={"form": {"fields": ("link", "share", "comment"),
+                                   "use_ajax": True}
                           "type": "bookmark",
-                          "values": {}    # an additional slot for default values
+                          "values": {"source": "webform"}
                 }
             )
 
@@ -1119,12 +1344,14 @@ class APIv1(BaseView):
 
             collection1 = ObjectConf(
                 id = "bookmark",
-                ...
+                # ...
                 forms = {
-                    "newItem": {"fields": ("link", "share", "comment"), "use_ajax": True},
-                    "setItem": {"fields": ("link", "share", "comment"), "use_ajax": True}
+                    "newItem": {"fields": ("link", "share", "comment"),
+                                "use_ajax": True},
+                    "setItem": {"fields": ("link", "share", "comment"),
+                                "use_ajax": True}
                 },
-                ...
+                # ...
             )
 
         defines the `newItem` form in both cases with 3 form fields and to use ajax submissions ::
@@ -1135,11 +1362,6 @@ class APIv1(BaseView):
         created by the function as form parameter ``type=bookmark``. If you are using a customized
         view the type can be part of the views options slot ``settings={"type": "bookmark"}``.
         
-        The function returns rendered form html and the result as X-Result header:
-
-        - X-Result: true or false
-        - content: required html head includes like js and css files and rendered form html
-
         To get required assets in a seperate call use `?assets=only` as query parameter. This will
         return the required css and js assets for the specific form only.
         """
@@ -1192,45 +1414,71 @@ class APIv1(BaseView):
 
     def setItemForm(self):
         """
-        Renders and executes a web form based on the items configuration values. 
-        Form setup requires `subset` passed in the request. If subset is not 
-        given it defaults to `setItem`. `subset` is the form identifier used in
-        the items configuration as `form`.
+        Renders and executes a web form based on the configured form setup. All form validation and processing is handled
+        automatically and if the processing succeeds the item will be updated with the values submitted.
 
-        Form configuration lookup order :
+        **Request parameter**
+
+        - *assets*: You can call `newItemForm?assets=only` to get the required css, js assets only. The form
+                    iteself will not be processed. Use this in combination with `settings["form"]["assets"] = False`
+                    for single page applications or to load assets only once.
+
+        **Return values**
+
+        - *body*: This function returns rendered html code as body.
+        - *X-Result header*: http header indicating whether the new item has been created or not.
+
+        **Settings**
+
+        - *form*: (dict/string) the form setup as form definition including form fields and options or the subset
+                  to be loaded from the types configuration settings. This slot supports all `nive.HTMLForm` options
+        - *values*: (dict) additional values used for the new item. These values are independent from fields or
+                    form defaults.
+
+        For example the configuration for a new item form might loook like ::
+
+            settings = {
+                "form": {"fields": ("link", "share", "comment"),
+                         "use_ajax": True,
+                         "assets": False}
+                "values": {"source": "webform"}
+            }
+
+        Configuration lookup order :
 
         1) Customized `setItemForm` view ::
 
             bookmark = ViewConf(
                 name="update-bookmark",
                 attr="setItemForm",
-                ...
-                settings={
-                    "form": {"fields": ("link", "share", "comment"), "use_ajax": True}
-                    "values": {}    # an additional slot for default values
+                # ...
+                settings={"form": {"fields": ("link", "share", "comment"),
+                                   "use_ajax": True}
+                          "values": {"source": "webform"}
                 }
             )
 
-        2) The types' ObjectConf.forms settings for `setItem`  ::
+        2) The types' ObjectConf.forms settings for `setItem` ::
 
             collection1 = ObjectConf(
                 id = "bookmark",
-                ...
+                # ...
                 forms = {
-                    "newItem": {"fields": ("link", "share", "comment"), "use_ajax": True},
-                    "setItem": {"fields": ("link", "share", "comment"), "use_ajax": True}
+                    "newItem": {"fields": ("link", "share", "comment"),
+                                "use_ajax": True},
+                    "setItem": {"fields": ("link", "share", "comment"),
+                                "use_ajax": True}
                 },
-                ...
+                # ...
             )
 
         defines the `setItem` form in both cases with 3 form fields and to use ajax submissions ::
-        
-            {"fields": ("link", "share", "comment"), "use_ajax": True}
-        
-        The function returns rendered form html and result as X-Result header:
 
-        - X-Result: true or false
-        - content: required html head includes like js and css files and rendered form html
+            {"fields": ("link", "share", "comment"), "use_ajax": True}
+
+        If you are using the default `setItemForm` view you have to pass the type id to be
+        created by the function as form parameter ``type=bookmark``. If you are using a customized
+        view the type can be part of the views options slot ``settings={"type": "bookmark"}``.
 
         To get required assets in a seperate call use `?assets=only` as query parameter. This will
         return the required css and js assets for the specific form only.
@@ -1390,23 +1638,24 @@ class APIv1(BaseView):
     def renderTmpl(self, template=None):
         """
         Renders the items template defined in the configuration (`ObjectConf.template`). The template
-        will be called with a dictionary containing the item, request and view. See `pyramid.renderers`
-        for possible template engines. ::
+        will be called with a dictionary containing the `item`, `request` and `view`.
+
+        See `pyramid.renderers` for possible template engines.
+
+        Link the template in the objects type configuration ::
 
             collection1 = ObjectConf(
                 id = "bookmark",
                 template="bookmark.pt",
-                ...
+                # ...
             )
 
-
-        For custom views you can use the template renderer as part of the view configuration directly and
-        istead of this function `renderTmpl` use ``attr=tmpl``.
+        You can now add a custom view and use the objects template without linking it in the view definition.
 
             bookmark = ViewConf(
                 name="render-me",
-                attr="tmpl",
-                ...
+                attr="renderTmpl",
+                # ...
             )
 
         """
@@ -1421,6 +1670,8 @@ class APIv1(BaseView):
         """
         For view based template rendering. An instance of the view class is automatically
         passed to the template as `view`. The current context can be accessed as `context`.
+
+        See `pyramid.renderers` for possible template engines.
 
         Configuration example ::
 
@@ -1471,7 +1722,7 @@ class APIv1(BaseView):
         """
         if template:
             values["view"] = self
-            return render(template, values, request=self.request)
+            return renderers.render(template, values, request=self.request)
         typename = typename or values.get("type")
         if not typename:
             return u"-no type-"
@@ -1485,7 +1736,7 @@ class APIv1(BaseView):
         v2.update(values)
         v2["options"] = kw
         v2["view"] = self
-        return render(tmpl, v2, request=self.request)
+        return renderers.render(tmpl, v2, request=self.request)
 
 
 

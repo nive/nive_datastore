@@ -14,6 +14,10 @@ from pyramid import testing
 from pyramid.httpexceptions import HTTPFound
 from pyramid.renderers import render
 
+"""
+Tests:
+view settings loaded from view conf
+"""
 
 
 class tWebapi_db(object):
@@ -534,7 +538,8 @@ class tWebapi_db(object):
             "fields": ["id", "pool_changedby"],
             "parameter": {}
         }
-        result = view.searchItems(profile=profile)
+        view.GetViewConf = lambda: Conf(settings=profile)
+        result = view.searchItems()
         self.assert_(len(result["items"])==6)
 
         profile = {
@@ -543,7 +548,8 @@ class tWebapi_db(object):
             "parameter": {"pool_changedby":"test"},
             "operators": {"pool_changedby":"="}
         }
-        result = view.searchItems(profile=profile)
+        view.GetViewConf = lambda: Conf(settings=profile)
+        result = view.searchItems()
         self.assert_(len(result["items"])==6)
 
         profile = {
@@ -552,7 +558,8 @@ class tWebapi_db(object):
             "parameter": lambda c, r: {"pool_changedby":"test"},
             "operators": {"pool_changedby":"="}
         }
-        result = view.searchItems(profile=profile)
+        view.GetViewConf = lambda: Conf(settings=profile)
+        result = view.searchItems()
         self.assert_(len(result["items"])==6)
 
         profile = {
@@ -561,7 +568,8 @@ class tWebapi_db(object):
             "parameter": {"pool_changedby":"test"},
             "operators": {"pool_changedby":"<>"}
         }
-        result = view.searchItems(profile=profile)
+        view.GetViewConf = lambda: Conf(settings=profile)
+        result = view.searchItems()
         self.assert_(len(result["items"])==0)
 
         profile = {
@@ -571,7 +579,8 @@ class tWebapi_db(object):
             "operators": {"pool_changedby":"="},
             "advanced": {"groupby": "pool_type"}
         }
-        result = view.searchItems(profile=profile)
+        view.GetViewConf = lambda: Conf(settings=profile)
+        result = view.searchItems()
         self.assert_(len(result["items"])==2)
 
     
@@ -600,17 +609,17 @@ class tWebapi_db(object):
         self.assert_(len(result["items"])==0)
 
         # testing listings and parameter
-        profiles = self.app.configuration.search
+        profiles = self.app.configuration.searchItems
         self.app.configuration.unlock()
-        self.app.configuration.search = None
+        self.app.configuration.searchItems = None
         self.request.POST = {"profile": "all"}
         try:
             result = view.searchItems()
         except:
-            self.app.configuration.search = profiles
+            self.app.configuration.searchItems = profiles
             self.app.configuration.lock()
             raise
-        self.app.configuration.search = profiles
+        self.app.configuration.searchItems = profiles
         self.assert_(result["error"])
         self.assert_(len(result["items"])==0)
         self.app.configuration.lock()
@@ -637,16 +646,14 @@ class tWebapi_db(object):
         values = view.subtree()
         self.assert_(self.request.response.status.startswith("400"))
 
-        values = view.subtree(profile={})
-        self.assert_(self.request.response.status.startswith("400"))
-
         self.request.POST = {"profile": "none"}
         values = view.subtree()
         self.assert_(self.request.response.status.startswith("400"))
 
         profile = {"descent": ("nive.definitions.IContainer",),
                    "addContext": True}
-        values = view.subtree(profile=profile)
+        view.GetViewConf = lambda: Conf(settings=profile)
+        values = view.subtree()
         self.assert_(values!={})
         self.assert_(len(values["items"])==2)
         self.assert_(len(values["items"][0]["items"])==3)
@@ -654,7 +661,8 @@ class tWebapi_db(object):
         profile = {"descent": ("nive.definitions.IContainer",),
                    "parameter": {"pool_type": "bookmark"},
                    "addContext": True}
-        values = view.subtree(profile=profile)
+        view.GetViewConf = lambda: Conf(settings=profile)
+        values = view.subtree()
         self.assert_(values!={})
         self.assert_(len(values["items"])==2)
         self.assert_(len(values["items"][0]["items"])==1)
