@@ -47,13 +47,18 @@ class tWebapi_db(object):
 
 
     def test_functions(self):
-        values = {"key1":"", "key2":"null", "key3":"undefined", "key4":"123", "key5":"123.456"}
+        values = {"key1":"", "key2":"null", "key3":"undefined", "key4":"123", "key5":"123.456",
+                  "key6":"false", "key7":"true", "key8": "something"}
         self.assert_(ExtractJSValue(values, "key1", "default", "string")=="default")
         self.assert_(ExtractJSValue(values, "key2", "default", "string")=="default")
         self.assert_(ExtractJSValue(values, "key3", "default", "string")=="default")
         self.assert_(ExtractJSValue(values, "key4", "default", "int")==123)
         self.assert_(ExtractJSValue(values, "key5", "default", "float")==123.456)
-        
+        self.assert_(ExtractJSValue(values, "key6", True, "bool")==False)
+        self.assert_(ExtractJSValue(values, "key7", False, "bool")==True)
+        self.assert_(ExtractJSValue(values, "keyx", True, "bool")==True)
+        self.assert_(ExtractJSValue(values, "key8", False, "none")=="something")
+
         
     def test_deserialize(self):
         user = User(u"test")
@@ -69,6 +74,9 @@ class tWebapi_db(object):
         values = DeserializeItems(view, items, {"bookmark": ("comment", "link")})
         self.assert_(len(values)==1)
         values = DeserializeItems(view, items, {"default__": ("comment", "link")})
+        self.assert_(len(values)==1)
+
+        values = DeserializeItems(view, items, {"default__": ("comment", "link")}, render=("comment","link"))
         self.assert_(len(values)==1)
 
         items = o1
@@ -474,39 +482,39 @@ class tWebapi_db(object):
         create_track(o3, user)
 
         self.request.POST = {}
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==6, result)
 
         self.request.POST = {"profile":"bookmarks"}
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==3)
     
         # container activated
         self.request.POST = {"profile":"tracks"}
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==0, result)
 
         view = APIv1(o1, self.request)
         self.request.POST = {"profile":"tracks"}
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==2, result)
     
         self.request.POST = {"size":2}
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==2)
         self.assert_(result["size"]==2)
         self.assert_(result["start"]==1,result)
         self.assert_(result["total"]==6)
 
         self.request.POST = {"size":2,"start":3}
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==2)
         self.assert_(result["size"]==2)
         self.assert_(result["start"]==3,result)
         self.assert_(result["total"]==6)
 
         self.request.POST = {"size":2,"start":6}
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==1, result)
         self.assert_(result["size"]==1)
         self.assert_(result["start"]==6)
@@ -539,7 +547,7 @@ class tWebapi_db(object):
             "parameter": {}
         }
         view.GetViewConf = lambda: Conf(settings=profile)
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==6)
 
         profile = {
@@ -549,7 +557,7 @@ class tWebapi_db(object):
             "operators": {"pool_changedby":"="}
         }
         view.GetViewConf = lambda: Conf(settings=profile)
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==6)
 
         profile = {
@@ -559,7 +567,7 @@ class tWebapi_db(object):
             "operators": {"pool_changedby":"="}
         }
         view.GetViewConf = lambda: Conf(settings=profile)
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==6)
 
         profile = {
@@ -569,7 +577,7 @@ class tWebapi_db(object):
             "operators": {"pool_changedby":"<>"}
         }
         view.GetViewConf = lambda: Conf(settings=profile)
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==0)
 
         profile = {
@@ -580,7 +588,7 @@ class tWebapi_db(object):
             "advanced": {"groupby": "pool_type"}
         }
         view.GetViewConf = lambda: Conf(settings=profile)
-        result = view.searchItems()
+        result = view.search()
         self.assert_(len(result["items"])==2)
 
     
@@ -592,34 +600,34 @@ class tWebapi_db(object):
 
         # testing listings and parameter
         self.request.POST = {"start": "wrong number"}
-        result = view.searchItems()
+        result = view.search()
         self.assert_(result["error"])
         self.assert_(len(result["items"])==0)
 
         # testing listings and parameter
         self.request.POST = {"size": "wrong number"}
-        result = view.searchItems()
+        result = view.search()
         self.assert_(result["error"])
         self.assert_(len(result["items"])==0)
 
         # testing listings and parameter
         self.request.POST = {"profile": "not a profile"}
-        result = view.searchItems()
+        result = view.search()
         self.assert_(result["error"])
         self.assert_(len(result["items"])==0)
 
         # testing listings and parameter
-        profiles = self.app.configuration.searchItems
+        profiles = self.app.configuration.search
         self.app.configuration.unlock()
-        self.app.configuration.searchItems = None
+        self.app.configuration.search = None
         self.request.POST = {"profile": "all"}
         try:
-            result = view.searchItems()
+            result = view.search()
         except:
-            self.app.configuration.searchItems = profiles
+            self.app.configuration.search = profiles
             self.app.configuration.lock()
             raise
-        self.app.configuration.searchItems = profiles
+        self.app.configuration.search = profiles
         self.assert_(result["error"])
         self.assert_(len(result["items"])==0)
         self.app.configuration.lock()
@@ -702,6 +710,23 @@ class tWebapi_db(object):
         r = self.root
         
         view = APIv1(r, self.request)
+        view.__configuration__ = lambda : Conf(assets=(), views=())
+
+        self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text"}
+        result = view.newItemForm()
+        self.assert_(self.request.response.headers["X-Result"])
+
+        objs=len(r.GetObjsList(fields=["id"]))
+        self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "create$": "1"}
+        try:
+            view.newItemForm()
+        except ExceptionalResponse, result:
+            self.assert_(self.request.response.headers["X-Result"])
+            self.assert_(objs+1==len(r.GetObjsList(fields=["id"])))
+
+        view = APIv1(r, self.request)
+        view.__configuration__ = lambda : Conf(assets=(), views=())
+        view.GetViewConf = lambda: Conf(settings={"form": {"fields": ("comment",)}})
 
         self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text"}
         result = view.newItemForm()
@@ -716,12 +741,48 @@ class tWebapi_db(object):
             self.assert_(objs+1==len(r.GetObjsList(fields=["id"])))
 
 
+    def test_newform_assets(self):
+        user = User(u"test")
+        user.groups.append("group:manager")
+        r = self.root
+
+        view = APIv1(r, self.request)
+        view.__configuration__ = lambda: Conf(assets=(("jquery.js","path"),), views=())
+
+        self.request.POST = {"assets":"only"}
+        result = view.newItemForm()
+        self.assert_(result["content"])
+        self.assert_(result["content"].find("<form")==-1)
+
+
+    def test_newform_noajax(self):
+        user = User(u"test")
+        user.groups.append("group:manager")
+        r = self.root
+
+        view = APIv1(r, self.request)
+        view.__configuration__ = lambda: Conf(assets=(), views=())
+        view.GetViewConf = lambda: Conf(settings={"form": {"fields": ("comment",), "use_ajax": False}, "includeAssets": False})
+
+        self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text"}
+        result = view.newItemForm()
+        self.assert_(self.request.response.headers["X-Result"])
+
+        objs=len(r.GetObjsList(fields=["id"]))
+        self.request.POST = {"pool_type": "bookmark", "link": u"the link", "comment": u"some text", "create$": "1"}
+        result = view.newItemForm()
+        self.assert_(self.request.response.headers["X-Result"])
+        self.assert_(result["content"])
+        self.assert_(objs+1==len(r.GetObjsList(fields=["id"])))
+
+
     def test_newformfailures(self):
         user = User(u"test")
         user.groups.append("group:manager")
         r = self.root
         
         view = APIv1(r, self.request)
+        view.__configuration__ = lambda : Conf(assets=(), views=())
 
         # no type
         self.request.POST = {"link": u"the link", "comment": u"some text"}
@@ -754,6 +815,22 @@ class tWebapi_db(object):
         self.remove.append(o1.id)
         
         view = APIv1(o1, self.request)
+        view.__configuration__ = lambda : Conf(assets=(), views=())
+
+        self.request.POST = {}
+        result = view.setItemForm()
+        self.assert_(self.request.response.headers["X-Result"])
+
+        objs=len(r.GetObjsList(fields=["id"]))
+        self.request.POST = {"link": u"the new link", "comment": u"some new text", "create$": "1"}
+        result = view.setItemForm()
+        self.assert_(result["content"])
+        self.assert_(self.request.response.headers["X-Result"])
+        self.assert_(objs==len(r.GetObjsList(fields=["id"])))
+
+        view = APIv1(o1, self.request)
+        view.__configuration__ = lambda : Conf(assets=(), views=())
+        view.GetViewConf = lambda: Conf(settings={"form": {"fields": ("comment",)}})
 
         self.request.POST = {}
         result = view.setItemForm()
@@ -767,7 +844,46 @@ class tWebapi_db(object):
         self.assert_(objs==len(r.GetObjsList(fields=["id"])))
 
 
-    def test_newformfailures2(self):
+    def test_setform_assets(self):
+        user = User(u"test")
+        user.groups.append("group:manager")
+        r = self.root
+        o1 = create_bookmark(r, user)
+        self.remove.append(o1.id)
+
+        view = APIv1(o1, self.request)
+        view.__configuration__ = lambda: Conf(assets=(("jquery.js","path"),), views=())
+
+        self.request.POST = {"assets":"only"}
+        result = view.setItemForm()
+        self.assert_(result["content"])
+        self.assert_(result["content"].find("<form")==-1)
+
+
+    def test_sertform_noajax(self):
+        user = User(u"test")
+        user.groups.append("group:manager")
+        r = self.root
+        o1 = create_bookmark(r, user)
+        self.remove.append(o1.id)
+
+        view = APIv1(o1, self.request)
+        view.__configuration__ = lambda: Conf(assets=(), views=())
+        view.GetViewConf = lambda: Conf(settings={"form": {"fields": ("comment",), "use_ajax": False}, "includeAssets": False})
+
+        self.request.POST = {}
+        result = view.setItemForm()
+        self.assert_(self.request.response.headers["X-Result"])
+
+        objs=len(r.GetObjsList(fields=["id"]))
+        self.request.POST = {"link": u"the new link", "comment": u"some new text", "create$": "1"}
+        result = view.setItemForm()
+        self.assert_(result["content"])
+        self.assert_(self.request.response.headers["X-Result"])
+        self.assert_(objs==len(r.GetObjsList(fields=["id"])))
+
+
+    def test_setformfailures(self):
         user = User(u"test")
         user.groups.append("group:manager")
         r = self.root
@@ -775,6 +891,7 @@ class tWebapi_db(object):
         self.remove.append(o1.id)
         
         view = APIv1(o1, self.request)
+        view.__configuration__ = lambda: Conf(assets=(), views=())
 
         # wrong subset
         self.request.POST = {"subset": "unknown!", "pool_type": "bookmark", "link": u"the link", "comment": u"some text"}

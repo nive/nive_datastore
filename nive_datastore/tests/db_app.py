@@ -47,24 +47,25 @@ collection2 = ObjectConf("nive_datastore.item",
 
 
 appconf = AppConf("nive_datastore.app",
-    searchItems={"bookmarks":
-                  {"pool_type": "bookmark", 
-                   "container": False,
-                   "fields": ["id", "link", "comment", "pool_changedby"],
-                   "parameter": {},
-                   "dynamic": {"size":10},
-                   "size": 10},
-              "tracks":  
-                  {"pool_type": "track", 
-                   "container": True,
-                   "fields": ["id", "link", "comment", "pool_changedby"],
-                   "dynamic": {"size":10},
-                   "parameter": {}},
-              "default":
-                  {"container": False,
-                   "fields": ["id", "pool_create", "pool_changedby"],
-                   "dynamic": {"size":10, "start": 1},
-                   "parameter": {}},
+    search = {
+            "bookmarks":
+                {"pool_type": "bookmark",
+                 "container": False,
+                 "fields": ["id", "link", "comment", "pool_changedby"],
+                 "parameter": {},
+                 "dynamic": {"size":10},
+                 "size": 10},
+            "tracks":
+                {"pool_type": "track",
+                 "container": True,
+                 "fields": ["id", "link", "comment", "pool_changedby"],
+                 "dynamic": {"size":10},
+                 "parameter": {}},
+            "default":
+                {"container": False,
+                 "fields": ["id", "pool_create", "pool_changedby"],
+                 "dynamic": {"size":10, "start": 1},
+                 "parameter": {}},
     },
 )
 appconf.modules.append(collection1)

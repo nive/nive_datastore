@@ -49,9 +49,6 @@ class DispatchRequest(object):
 
 class Dispatcher(object):
   
-    def __call__(self, method, secure, **kw):  
-        return self.dispatch(method, secure, kw)
-    
     def dispatch(self, method, secure=False, request=None, **kw):
         """
         If *secure* is true permissions of the current user are checked against the view. If the
@@ -60,7 +57,6 @@ class Dispatcher(object):
         
         returns rendered result
         """
-        raiseUnauthorized = True
         if not request:
             secure = False
             
@@ -69,14 +65,8 @@ class Dispatcher(object):
         disprequest.POST = kw
         disprequest.method = "POST"
         disprequest.content_type = "dict"
-        if not raiseUnauthorized:
-            try:
-                value = render_view(self, disprequest, method, secure)
-            except HTTPForbidden:
-                return {}, "403 Forbidden"
-        else:
-            value = render_view(self, disprequest, method, secure)
-        if value==None:
+        value = render_view(self, disprequest, method, secure)
+        if value is None:
             value = {}
         else:
             value = json.loads(value)

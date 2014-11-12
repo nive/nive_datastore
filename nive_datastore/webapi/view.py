@@ -16,7 +16,7 @@ from nive.definitions import ConfigurationError
 
 from nive.workflow import WorkflowNotAllowed
 from nive.views import BaseView
-from nive.forms import Form, ObjectForm
+from nive.forms import Form, ObjectForm, MakeCustomizedViewForm
 from nive.security import Allow, Everyone, Authenticated, ALL_PERMISSIONS
 from nive.helper import JsonDataEncoder
 from nive.helper import ResolveName
@@ -25,6 +25,8 @@ from nive_datastore.i18n import _
 
 # view module definition ------------------------------------------------------------------
 
+# shortcut to add the context to view definitions.
+_ic = "nive.definitions.IContainer"
 _io = "nive.definitions.IObject"
 
 #@nive_module
@@ -33,21 +35,20 @@ configuration = ViewModuleConf(
     name = _(u"Data storage api"),
     containment = "nive_datastore.app.IDataStorage",
     view = "nive_datastore.webapi.view.APIv1",
-    context = "nive.definitions.IContainer",   # by default views are applied to all containers
     views = (
         # container views ---------------------------------------------------------------------------
         # these views only apply to container like objects and root
 
         # add a new item
-        ViewConf(name="newItem",    attr="newItem",    permission="api-newItem",     renderer="json"),
+        ViewConf(name="newItem",    attr="newItem",    permission="api-newItem",     renderer="json",   context=_ic),
         # list and search
-        ViewConf(name="list",       attr="listItems",  permission="api-list",        renderer="json"),
-        ViewConf(name="search",     attr="searchItems",permission="api-search",      renderer="json"),
+        ViewConf(name="list",       attr="listItems",  permission="api-list",        renderer="json",   context=_ic),
+        ViewConf(name="search",     attr="search",     permission="api-search",      renderer="json",   context=_ic),
         # rendering
-        ViewConf(name="subtree",    attr="subtree",    permission="api-subtree",     renderer="string"),
-        ViewConf(name="render",     attr="renderTmpl", permission="api-render"),
+        ViewConf(name="subtree",    attr="subtree",    permission="api-subtree",     renderer="string", context=_ic),
+        ViewConf(name="render",     attr="renderTmpl", permission="api-render",                         context=_ic ),
         # forms
-        ViewConf(name="newItemForm",attr="newItemForm",permission="api-newItemForm", renderer="string"),
+        ViewConf(name="newItemForm",attr="newItemForm",permission="api-newItemForm", renderer="string", context=_ic),
 
         # object views ---------------------------------------------------------------------------
         # read
@@ -55,7 +56,7 @@ configuration = ViewModuleConf(
         # update
         ViewConf(name="setItem",    attr="setContext", permission="api-setItem",     renderer="json",   context=_io),
         # delete
-        ViewConf(name="deleteItem", attr="deleteItem", permission="api-deleteItem",  renderer="json"),
+        ViewConf(name="deleteItem", attr="deleteItem", permission="api-deleteItem",  renderer="json",   context=_io),
         # rendering
         ViewConf(name="subtree",    attr="subtree",    permission="api-subtree",     renderer="string", context=_io),
         ViewConf(name="render",     attr="renderTmpl", permission="api-render",                         context=_io),
@@ -380,7 +381,13 @@ class APIv1(BaseView):
                 response.status = u"400 Unknown type"
                 return {"error": u"Unknown type", "result":[]}
 
-            form, subset = self._loadForm(self.context, subset, typeconf, viewconf, u"newItem")
+            # set up the form. subset might be the form configuration up to here.
+            form, subset = MakeCustomizedViewForm(view=self,
+                                                  forContext=self.context,
+                                                  formSettingsOrSubset=subset,
+                                                  typeconf=typeconf,
+                                                  defaultSettings=self._formDefaults("newItem"),
+                                                  loadFromViewModuleConf=self.configuration)
             form.Setup(subset=subset)
             result, data, errors = form.ValidateSchema(data)
             if not result:
@@ -422,7 +429,13 @@ class APIv1(BaseView):
                 errors.append(u"Unknown type")
                 continue
 
-            form, subset = self._loadForm(self.context, subset, typeconf, viewconf, u"newItem")
+            # set up the form. subset might be the form configuration up to here.
+            form, subset = MakeCustomizedViewForm(view=self,
+                                                  forContext=self.context,
+                                                  formSettingsOrSubset=subset,
+                                                  typeconf=typeconf,
+                                                  defaultSettings=self._formDefaults("newItem"),
+                                                  loadFromViewModuleConf=self.configuration)
             form.Setup(subset=subset)
             result, data, err = form.ValidateSchema(data)
             if not result:
@@ -532,7 +545,13 @@ class APIv1(BaseView):
                 return {"error": u"Not allowed", "result": []}
 
             typeconf = setObject.configuration
-            form, subset = self._loadForm(setObject, subset, typeconf, viewconf, "setItem")
+            # set up the form. subset might be the form configuration up to here.
+            form, subset = MakeCustomizedViewForm(view=self,
+                                                  forContext=setObject,
+                                                  formSettingsOrSubset=subset,
+                                                  typeconf=typeconf,
+                                                  defaultSettings=self._formDefaults("setItem"),
+                                                  loadFromViewModuleConf=self.configuration)
             form.Setup(subset=subset)
             result, data, errors = form.ValidateSchema(self.GetFormValues())
             if not result:
@@ -573,7 +592,13 @@ class APIv1(BaseView):
                 continue
 
             typeconf = item.configuration
-            form, subset = self._loadForm(item, subset, typeconf, viewconf, "setItem")
+            # set up the form. subset might be the form configuration up to here.
+            form, subset = MakeCustomizedViewForm(view=self,
+                                                  forContext=item,
+                                                  formSettingsOrSubset=subset,
+                                                  typeconf=typeconf,
+                                                  defaultSettings=self._formDefaults("setItem"),
+                                                  loadFromViewModuleConf=self.configuration)
             form.Setup(subset=subset)
             result, data, err = form.ValidateSchema(data)
             if not result:
@@ -728,7 +753,7 @@ class APIv1(BaseView):
         does not check access permissions for items included in the result.
         The result can only inlcude meta layer fields and type fields for a single type.
 
-        For an advanced listing function use `subtree` or `searchItems`.
+        For an advanced listing function use `subtree` or `search`.
 
         **Request parameter:**
 
@@ -819,7 +844,7 @@ class APIv1(BaseView):
         return {"items": data, "start": start}
 
 
-    def searchItems(self):
+    def search(self):
         """
         Advanced search functions with many optionsand support for preconfigured search
         profiles. The functions returns a set of batched items encoded as json.
@@ -919,7 +944,7 @@ class APIv1(BaseView):
         The system provides two options to configure search profiles. The first one uses the application configuration ::
 
             datastore = AppConf(
-                searchItems = {
+                search = {
                     # the default profile if no name is given
                     "default": {
                         # profile values go here
@@ -931,14 +956,14 @@ class APIv1(BaseView):
             )
 
         To use the `extended` profile pass the profiles name as query parameter
-        e.g. `http://myapp.com/storage/searchItems?profile=extended`. This way searchItems will always return json.
+        e.g. `http://myapp.com/storage/search?profile=extended`. This way search will always return json.
 
-        The second option is to add a custom view based on `searchItems`. This way you can add a custom renderer,
+        The second option is to add a custom view based on `search`. This way you can add a custom renderer,
         view name and permissions ::
 
             search = ViewConf(
                 name="list",
-                attr="searchItems",
+                attr="search",
                 context="nive_datastore.root.root",
                 permission="view",
                 renderer="myapp:templates/list.pt",
@@ -961,7 +986,7 @@ class APIv1(BaseView):
 
         else:
             # 2) in app.configuration.search
-            profiles = self.context.app.configuration.get("searchItems")
+            profiles = self.context.app.configuration.get("search")
             if not profiles:
                 response.status = u"400 No search profiles found"
                 return {"error": "No search profiles found", "items":[]}
@@ -1065,7 +1090,7 @@ class APIv1(BaseView):
             kws.update(profile["advanced"])
 
         if start is not None and start!=0:
-            # Search Functions use 0 based index, searchItems 1 based index
+            # Search Functions use 0 based index, search 1 based index
             kws["start"] = start-1
         if size is not None:
             kws["max"] = size
@@ -1299,7 +1324,7 @@ class APIv1(BaseView):
         **Request parameter**
 
         - *assets*: You can call `newItemForm?assets=only` to get the required css, js assets only. The form
-                    iteself will not be processed. Use this in combination with `settings["form"]["assets"] = False`
+                    iteself will not be processed. Use this in combination with `settings["includeAssets"] = False`
                     for single page applications or to load assets only once.
 
         **Return values**
@@ -1314,14 +1339,15 @@ class APIv1(BaseView):
                   to be loaded from the types configuration settings. This slot supports all `nive.HTMLForm` options
         - *values*: (dict) additional values used for the new item. These values are independent from fields or
                     form defaults.
+        - *includeAssets*: (bool) include js/css assets required by the form in the html markup. default true.
 
         For example the configuration for a new item form might loook like ::
 
             settings = {
                 "form": {"fields": ("link", "share", "comment"),
-                         "use_ajax": True,
-                         "assets": False}
+                         "use_ajax": True}
                 "type": "bookmark",
+                "includeAssets": False,
                 "values": {"source": "webform"}
             }
 
@@ -1365,32 +1391,34 @@ class APIv1(BaseView):
         To get required assets in a seperate call use `?assets=only` as query parameter. This will
         return the required css and js assets for the specific form only.
         """
-        typename = subset = ""
+        typename = subset = u""
         values = defaults = None
+        includeAssets = True
         # look up the new type in custom view definition
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
             typename = viewconf.settings.get("type")
-            subset = viewconf.settings.get("form")
+            subset = viewconf.settings.get("form") or "newItem"
             values = viewconf.settings.get("values")
-            defaults = viewconf.settings.get("defaults")
+            includeAssets = viewconf.settings.get("includeAssets", includeAssets)
         else:
-            if not subset:
-                subset = self.GetFormValue("subset") or "newItem"
-                if not subset:
-                    self.AddHeader("X-Result", "false")
-                    return {"content": u"No subset"}
+            subset = self.GetFormValue("subset") or "newItem"
 
+        if not typename:
+            typename = self.GetFormValue("type") or self.GetFormValue("pool_type")
             if not typename:
-                typename = self.GetFormValue("type") or self.GetFormValue("pool_type")
-                if not typename:
-                    self.AddHeader("X-Result", "false")
-                    return {"content": u"Type is empty"}
+                self.AddHeader("X-Result", "false")
+                return {"content": u"Type is empty"}
 
         typeconf = self.context.app.GetObjectConf(typename)
 
-        # set up the form
-        form, subset = self._loadForm(self.context, subset, typeconf, viewconf, "newItem", ItemForm.defaultNewItemAction)
+        # set up the form. subset might be the form configuration up to here.
+        form, subset = MakeCustomizedViewForm(view=self,
+                                              forContext=self.context,
+                                              formSettingsOrSubset=subset,
+                                              typeconf=typeconf,
+                                              defaultSettings=self._formDefaults("newItem"),
+                                              loadFromViewModuleConf=self.configuration)
         form.Setup(subset=subset, addTypeField=True)
 
         if self.GetFormValue("assets")=="only":
@@ -1403,7 +1431,7 @@ class APIv1(BaseView):
             result = result.id
 
         self.AddHeader("X-Result", str(result).lower())
-        if hasattr(form, "assets") and form.assets:
+        if includeAssets:
             # if assets are enabled add required js+css for form except those defined
             # in the view modules asset list
             head = form.HTMLHead(ignore=[a[0] for a in self.configuration.assets])
@@ -1419,8 +1447,8 @@ class APIv1(BaseView):
 
         **Request parameter**
 
-        - *assets*: You can call `newItemForm?assets=only` to get the required css, js assets only. The form
-                    iteself will not be processed. Use this in combination with `settings["form"]["assets"] = False`
+        - *assets*: You can call `setItemForm?assets=only` to get the required css, js assets only. The form
+                    iteself will not be processed. Use this in combination with `settings["includeAssets"] = False`
                     for single page applications or to load assets only once.
 
         **Return values**
@@ -1434,13 +1462,13 @@ class APIv1(BaseView):
                   to be loaded from the types configuration settings. This slot supports all `nive.HTMLForm` options
         - *values*: (dict) additional values used for the new item. These values are independent from fields or
                     form defaults.
+        - *includeAssets*: (bool) include js/css assets required by the form in the html markup. default true.
 
         For example the configuration for a new item form might loook like ::
 
             settings = {
                 "form": {"fields": ("link", "share", "comment"),
-                         "use_ajax": True,
-                         "assets": False}
+                         "use_ajax": True}
                 "values": {"source": "webform"}
             }
 
@@ -1484,25 +1512,31 @@ class APIv1(BaseView):
         return the required css and js assets for the specific form only.
         """
         values = None
+        includeAssets = True
         # look up the new type in custom view definition
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
-            subset = viewconf.settings.get("form")
+            subset = viewconf.settings.get("form") or "setItem"
             values = viewconf.settings.get("values")
+            includeAssets = viewconf.settings.get("includeAssets", includeAssets)
         else:
             subset = self.GetFormValue("subset") or "setItem"
 
         setObject = self.context
         typeconf = setObject.configuration
 
-        # set up the form
-        form, subset = self._loadForm(setObject, subset, typeconf, viewconf, "setItem", ItemForm.defaultSetItemAction)
+        # set up the form. subset might be the form configuration up to here.
+        form, subset = MakeCustomizedViewForm(view=self,
+                                              forContext=setObject,
+                                              formSettingsOrSubset=subset,
+                                              typeconf=typeconf,
+                                              defaultSettings=self._formDefaults("setItem"),
+                                              loadFromViewModuleConf=self.configuration)
         form.Setup(subset=subset)
 
         if self.GetFormValue("assets")=="only":
-            #return self.SendResponse(data=form.HTMLHead(ignore=()))
             self.AddHeader("X-Result", "true")
-            return {"content": form.HTMLHead(ignore=())}
+            return {"content": form.HTMLHead(ignore=[a[0] for a in self.configuration.assets])}
 
         # process and render the form.
         result, data, action = form.Process(values=values)
@@ -1510,7 +1544,7 @@ class APIv1(BaseView):
             result = result.id
 
         self.AddHeader("X-Result", str(result).lower())
-        if hasattr(form, "assets") and form.assets:
+        if includeAssets:
             # if assets are enabled add required js+css for form except those defined
             # in the view modules asset list
             head = form.HTMLHead(ignore=[a[0] for a in self.configuration.assets])
@@ -1519,38 +1553,24 @@ class APIv1(BaseView):
         return {"content": data}
 
 
-    def _loadForm(self, forContext, subset, typeconf, viewconf, defaultsubset, defaultaction=None):
-        # form rendering settings
-        form = ItemForm(view=self, context=forContext, loadFromType=typeconf)
-
-        # load subset
-        if subset is None:
-            subset = defaultsubset
-        if isinstance(subset, basestring):
-            # the subset is referenced as string -> look it up in typeconf.forms
-            form.subsets = typeconf.forms
-        else:
-            form.subsets = {defaultsubset: subset}
-            subset = defaultsubset
-
-        if not subset in form.subsets:
-            raise ConfigurationError("Unknown subset "+subset)
-
-        # set up action
-        if not "actions" in form.subsets[subset] and defaultaction:
-            form.subsets[subset].update(defaultaction)
-
+    def _formDefaults(self, action):
         # customize form widget. values are applied to form.widget
-        form.widget.item_template = "field_onecolumn"
-        form.widget.action_template = "form_actions_onecolumn"
-        form.use_ajax = True
-        form.action = self.request.url
-        vm = self.viewModule
-        if vm:
-            formsettings = self.viewModule.get("form")
-            if isinstance(formsettings, dict):
-                form.ApplyOptions(formsettings)
-        return form, subset
+        values = dict(
+            use_ajax = True,
+            action = self.request.url
+        )
+        values["widget.item_template"] = "field_onecolumn"
+        values["widget.action_template"] = "form_actions_onecolumn"
+
+        # add actions
+        if action == "newItem":
+            values["actions"] = (Conf(id=u"create", method="CreateObj", name=_(u"Submit"), hidden=False, css_class=u"btn btn-primary"),)
+            values["defaultAction"] = Conf(id=u"default", method="StartFormRequest", name=u"Init", hidden=True,  css_class=u"")
+        elif action == "setItem":
+            values["actions"] = (Conf(id=u"edit", method="UpdateObj", name=_(u"Save"), hidden=False, css_class=u"btn btn-primary"),)
+            values["defaultAction"] = Conf(id=u"defaultEdit", method="StartObject", name=u"Init", hidden=True, css_class=u"")
+
+        return values
 
 
     # workflow functions ------------------------------------------------------------
@@ -1679,7 +1699,7 @@ class APIv1(BaseView):
                 name="render-me",
                 attr="tmpl",
                 renderer="myapp:templates/bookmark.pt",
-                ...
+                #  ...
             )
 
         """
@@ -1737,26 +1757,6 @@ class APIv1(BaseView):
         v2["options"] = kw
         v2["view"] = self
         return renderers.render(tmpl, v2, request=self.request)
-
-
-
-
-class ItemForm(ObjectForm):
-    """
-    Contains actions for object creation and updates.
-    
-    Supports sort form parameter *pepos*.
-    """
-    actions = [
-        Conf(id=u"default",    method="StartFormRequest", name=u"Initialize", hidden=True,  css_class=u""),
-        Conf(id=u"create",     method="CreateObj",        name=_(u"Submit"),  hidden=False, css_class=u"btn btn-primary"),
-        Conf(id=u"defaultEdit",method="StartObject",      name=u"Initialize", hidden=True,  css_class=u""),
-        Conf(id=u"edit",       method="UpdateObj",        name=_(u"Save"),    hidden=False, css_class=u"btn btn-primary"),
-        Conf(id=u"cancel",     method="Cancel",   name=_(u"Cancel and discard"),hidden=False, css_class=u"btn btn-default")
-    ]
-    defaultNewItemAction = {"actions": [u"create"],  "defaultAction": "default"}
-    defaultSetItemAction = {"actions": [u"edit"],    "defaultAction": "defaultEdit"}
-    subsets = None
 
 
 
