@@ -3,8 +3,8 @@
 # Released under GPL3. See license.txt
 
 """
-Nive Datastore Application configuration (sqlite example) and usage
--------------------------------------------------------------------
+Nive Datastore example
+----------------------
 The `Nive DataStore` is a highlevel storage with a focus on build in 
 functional extensions like form renderer, workflow integration, 
 hierarchical data structures, flexible renderer and a web api.

@@ -114,55 +114,6 @@ DefaultMaxStoreItems = 50
 DefaultMaxBatchItems = 100
 jsUndefined = (u"", u"null", u"undefined", None)
 
-# internal data processing ------------------------------------------------------------
-
-def DeserializeItems(view, items, fields, render=()):
-    # Convert item objects to dicts before returning to the user
-    if not isinstance(items, (list,tuple)):
-        items = [items]
-    if render is None:
-        render = ()
-
-    ff = fields
-    values = []
-    for item in items:
-        data = {}
-        # loop result fields
-        if isinstance(fields, dict):
-            ff = fields.get(item.GetTypeID())
-            if ff is None:
-                ff = fields.get("default__")
-        elif fields is None:
-            ff = item.configuration.get("toJson", ff)
-
-        if ff is None:
-            raise ConfigurationError, "toJson fields are not defined"
-
-        for field in ff:
-            if field in render:
-                data[field] = view.RenderField(field, context=item)
-            else:
-                data[field] = item.GetFld(field)
-
-        values.append(data)
-    return values
-
-
-def ExtractJSValue(values, key, default, format):
-    value = values.get(key, default)
-    if value in jsUndefined:
-        return default
-    elif format=="int":
-        return int(value)
-    elif format=="bool":
-        if value in (1, True, "1","true","True","Yes","yes","checked"):
-            return True
-        return False
-    elif format=="float":
-        return float(value)
-    return value
-
-
 
 class APIv1(BaseView):
 
@@ -1757,6 +1708,55 @@ class APIv1(BaseView):
         v2["options"] = kw
         v2["view"] = self
         return renderers.render(tmpl, v2, request=self.request)
+
+
+# internal data processing ------------------------------------------------------------
+
+def DeserializeItems(view, items, fields, render=()):
+    # Convert item objects to dicts before returning to the user
+    if not isinstance(items, (list,tuple)):
+        items = [items]
+    if render is None:
+        render = ()
+
+    ff = fields
+    values = []
+    for item in items:
+        data = {}
+        # loop result fields
+        if isinstance(fields, dict):
+            ff = fields.get(item.GetTypeID())
+            if ff is None:
+                ff = fields.get("default__")
+        elif fields is None:
+            ff = item.configuration.get("toJson", ff)
+
+        if ff is None:
+            raise ConfigurationError, "toJson fields are not defined"
+
+        for field in ff:
+            if field in render:
+                data[field] = view.RenderField(field, context=item)
+            else:
+                data[field] = item.GetFld(field)
+
+        values.append(data)
+    return values
+
+
+def ExtractJSValue(values, key, default, format):
+    value = values.get(key, default)
+    if value in jsUndefined:
+        return default
+    elif format=="int":
+        return int(value)
+    elif format=="bool":
+        if value in (1, True, "1","true","True","Yes","yes","checked"):
+            return True
+        return False
+    elif format=="float":
+        return float(value)
+    return value
 
 
 
