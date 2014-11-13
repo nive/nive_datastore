@@ -45,8 +45,9 @@ setupkw = dict(
       test_suite="nive_datastore",
       entry_points = """\
         [pyramid.scaffold]
-        datastoreSqlite=nive_datastore.scaffolds:DatastoreSqliteTemplate
-        datastoreMysql=nive_datastore.scaffolds:DatastoreMysqlTemplate
+        datastore-sqlite=nive_datastore.scaffolds:DatastoreSqliteTemplate
+        datastore-mysql=nive_datastore.scaffolds:DatastoreMysqlTemplate
+        datastore-postgres=nive_datastore.scaffolds:DatastorePostgresTemplate
       """
 )
 

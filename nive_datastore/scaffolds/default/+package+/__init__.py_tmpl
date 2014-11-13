@@ -29,12 +29,12 @@ storage = AppConf("nive_datastore.app",
     id="{{package}}",
 
     # search profile example
-    #profiles={"public": {
-    #            "pool_type": "todo",
-    #           "fields": ["id", "text", "done", "archive"],
-    #           "parameter": {"archive":0}
-    #          },
-    #},
+    profiles={"public": {
+                "pool_type": "todo",
+               "fields": ["id", "text", "done", "archive"],
+               "parameter": {"archive":0}
+              },
+    },
     defaultProfile = "public",
 
     # uncomment to remove all permissions
@@ -55,28 +55,28 @@ Example: Todo data collection definition
 A simple todo item with text, note, done flag and archive flag. Create and modified dates and 
 user information are automatically handled by the system. 
 """
-#todo = ObjectConf("nive_datastore.item",
-#    id = "todo",
-#    name = u"Todo",
-#    dbparam = "todos",
-#    subtypes = None,
-#    data = (
-#        FieldConf(id="text",     datatype="text", size=5000,  default=u"",  name=u"Todo", required=True),
-#        FieldConf(id="done",     datatype="bool", size=2,     default=False,name=u"Done"),
-#        FieldConf(id="archive",  datatype="bool", size=2,     default=False,name=u"Archive"),
-#        FieldConf(id="note",     datatype="text", size=5000,  default=u"",  name=u"Note"),
-#        FieldConf(id="todogroup",datatype="string",size=10,   default=u"",  name=u"Gruppe"),
-#    ),
-#    forms = {
-#        "newItem": {"fields": ("text","todogroup"), "ajax":True}, 
-#        "setItem": {"fields": ("id","done",), "ajax":True},
-#        "setItem2":{"fields": ("id","done","note"), "ajax":True},
-#        "archive": {"fields": ("id","archive",), "ajax":True}
-#    },
-#    render = ("id", "text", "done", "todogroup"),
-#    template = "todostore:todo.pt"
-#)
-#storage.modules.append(todo)
+todo = ObjectConf("nive_datastore.item",
+    id = "todo",
+    name = u"Todo",
+    dbparam = "todos",
+    subtypes = None,
+    data = (
+        FieldConf(id="text",     datatype="text", size=5000,  default=u"",  name=u"Todo", required=True),
+        FieldConf(id="done",     datatype="bool", size=2,     default=False,name=u"Done"),
+        FieldConf(id="archive",  datatype="bool", size=2,     default=False,name=u"Archive"),
+        FieldConf(id="note",     datatype="text", size=5000,  default=u"",  name=u"Note"),
+        FieldConf(id="todogroup",datatype="string",size=10,   default=u"",  name=u"Gruppe"),
+    ),
+    forms = {
+        "newItem": {"fields": ("text","todogroup"), "ajax":True},
+        "setItem": {"fields": ("id","done",), "ajax":True},
+        "setItem2":{"fields": ("id","done","note"), "ajax":True},
+        "archive": {"fields": ("id","archive",), "ajax":True}
+    },
+    render = ("id", "text", "done", "todogroup"),
+    template = "todostore:todo.pt"
+)
+storage.modules.append(todo)
 
 
 # add a static directory for html and js files. remove if not needed.
