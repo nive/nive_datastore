@@ -20,7 +20,7 @@ requires = [
 
 setupkw = dict(
       name='nive_datastore',
-      version='0.9.12',
+      version='0.9.13',
       description='Nive Data Storage - High level storage for structured data',
       long_description=README + '\n\n' + CHANGES,
       classifiers=[
@@ -34,7 +34,7 @@ setupkw = dict(
       ],
       author='Arndt Droullier, Nive GmbH',
       author_email='info@nive.co',
-      url='http://datastore.nive.co',
+      url='http://www.nive.co/website/en/open_source.html',
       keywords='collection storage workflow forms pyramid',
       license='GPL 3',
       packages=find_packages(),
