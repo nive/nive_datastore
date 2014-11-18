@@ -5,6 +5,7 @@ import time
 import logging
 import json
 import copy
+import inspect
 
 from pyramid.httpexceptions import HTTPForbidden
 from pyramid.security import has_permission
@@ -857,7 +858,8 @@ class APIv1(BaseView):
                            }
 
         - *dynamic*: (dict) these values values are extracted from the request. The values listed here are the defaults
-                     if not found in the request. The `dynamic` values are mixed with the fixed parameters and passed to the query.
+                     if not found in the request. The `dynamic` values are mixed with the fixed parameters and passed
+                     to the query. If you need custom value processing use a callback with the `parameter` option.
         - *operators*: (dict) fieldname:operator entries used for search conditions. See `nive.search`.
         - *ignoreEmpty*: (bool) automatically removes empty dynamic values and so these are not included in select statements.
         - *advanced*: (dict) search options like group restraints. See `nive.search` for details and all supported options.
@@ -1025,7 +1027,10 @@ class APIv1(BaseView):
         # request and context.
         p = profile.get("parameter", None)
         if callable(p):
-            p = apply(p, (self.context, self.request))
+            if "view" in inspect.getargspec(p).args:
+                p = apply(p, (self.context, self.request, self))
+            else:
+                p = apply(p, (self.context, self.request))
         if p:
             values.update(p)
 

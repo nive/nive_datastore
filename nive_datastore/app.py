@@ -9,7 +9,7 @@ The `Nive DataStore` is a highlevel storage with a focus on build in
 functional extensions like form renderer, workflow integration, 
 hierarchical data structures, flexible renderer and a web api.
 
-Sqllite or Mysql are used as data backend so the goal is not replace 
+Sqllite, Postgres or Mysql are used as data backend so the goal is not replace
 database systems but to provide a flexible, easy and convenient way 
 to store data items.
 
