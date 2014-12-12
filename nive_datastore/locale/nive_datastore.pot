@@ -6,7 +6,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE 1.0\n"
-"POT-Creation-Date: 2014-08-26 11:26+0200\n"
+"POT-Creation-Date: 2014-12-08 16:24+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -15,18 +15,14 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Language: \n"
 
-#: ./nive_datastore/item.py:29
+#: ./nive_datastore/item.py:28
 msgid "Data item"
 msgstr ""
 
-#: ./nive_datastore/root.py:37
+#: ./nive_datastore/root.py:36
 msgid "Data root"
 msgstr ""
 
-#: ./nive_datastore/webapi/view.py:21
-msgid "Data storage container api"
-msgstr ""
-
-#: ./nive_datastore/webapi/view.py:39
-msgid "Data storage item api"
+#: ./nive_datastore/webapi/view.py:1523 ./nive_datastore/webapi/view.py:1526
+msgid "Submit"
 msgstr ""

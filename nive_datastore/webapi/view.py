@@ -33,7 +33,7 @@ _io = "nive.definitions.IObject"
 #@nive_module
 configuration = ViewModuleConf(
     id = "DatastoreAPIv1",
-    name = _(u"Data storage api"),
+    name = u"Data storage api",
     containment = "nive_datastore.app.IDataStorage",
     view = "nive_datastore.webapi.view.APIv1",
     views = (
@@ -91,7 +91,7 @@ configuration = ViewModuleConf(
 #@nive_module
 localstorage_views = ViewModuleConf(
     id = "DatastoreAPIv1-Localstorage",
-    name = _(u"Data storage Localstorage api"),
+    name = u"Data storage Localstorage api",
     containment = "nive_datastore.app.IDataStorage",
     view = "nive_datastore.webapi.view.APIv1",
     context = "nive.definitions.IContainer",
@@ -1523,7 +1523,7 @@ class APIv1(BaseView):
             values["actions"] = (Conf(id=u"create", method="CreateObj", name=_(u"Submit"), hidden=False, css_class=u"btn btn-primary"),)
             values["defaultAction"] = Conf(id=u"default", method="StartFormRequest", name=u"Init", hidden=True,  css_class=u"")
         elif action == "setItem":
-            values["actions"] = (Conf(id=u"edit", method="UpdateObj", name=_(u"Save"), hidden=False, css_class=u"btn btn-primary"),)
+            values["actions"] = (Conf(id=u"edit", method="UpdateObj", name=_(u"Submit"), hidden=False, css_class=u"btn btn-primary"),)
             values["defaultAction"] = Conf(id=u"defaultEdit", method="StartObject", name=u"Init", hidden=True, css_class=u"")
 
         return values
@@ -1802,6 +1802,7 @@ def SetupStringRenderer(app, pyramidConfig):
         pyramidConfig.add_renderer('string', string_renderer_factory)
 
 stringRendererConf = ModuleConf(
+    id = "stringRenderer",
     events = (Conf(event="startRegistration", callback=SetupStringRenderer),),
 )
 
