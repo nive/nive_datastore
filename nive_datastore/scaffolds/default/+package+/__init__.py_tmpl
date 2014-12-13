@@ -93,7 +93,7 @@ User database
 This will include the user database instance and use sqlite  
 ``data/website.db`` as database and ``data/files`` as root directory for binary files.
  
-Default values are loaded from :py:module:``nive_cms.app``.
+Default values are loaded from :py:module:``nive_datastore.app``.
 
 Please refer to :py:class:``nive.definitions.AppConf`` and :py:class:``nive.definitions.DatabaseConf``
 for all configuration options. 

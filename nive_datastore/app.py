@@ -134,7 +134,7 @@ configuration.modules = [
     # root 
     "nive_datastore.root",
     # workflow
-    "nive_cms.workflow",
+    #"nive_datastore.workflow",
     # web api (view layer)
     "nive_datastore.webapi",
     "nive_datastore.webapi.view.stringRendererConf",
