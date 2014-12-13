@@ -20,7 +20,7 @@ requires = [
 
 setupkw = dict(
       name='nive_datastore',
-      version='0.9.13',
+      version='1.0rc1',
       description='Nive Data Storage - High level storage for structured data',
       long_description=README + '\n\n' + CHANGES,
       classifiers=[
