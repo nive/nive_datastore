@@ -1279,7 +1279,7 @@ class APIv1(BaseView):
 
         **Request parameter**
 
-        - *assets*: You can call `newItemForm?assets=only` to get the required css, js assets only. The form
+        - *assets*: You can call `newItemForm?assets=only` to get the required css+js assets only. The form
                     iteself will not be processed. Use this in combination with `settings["includeAssets"] = False`
                     for single page applications or to load assets only once.
 
