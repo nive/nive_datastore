@@ -133,7 +133,7 @@ sendMail = ToolConf("nive.components.tools.sendMail",
         "sender":"",
         "user":"",
         "pass_":"",
-        "sendername":"My Storage",
+        "fromName":"",
         "fromMail":""
     }
 )
