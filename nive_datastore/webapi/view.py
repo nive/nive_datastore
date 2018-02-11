@@ -242,7 +242,7 @@ class APIv1(BaseView):
         # turn into json
         items = DeserializeItems(self, items, fields, render)
         if callable(deserialize):
-            return deserialize(items, view)
+            return deserialize(items, self)
         return items
 
 
@@ -514,7 +514,7 @@ class APIv1(BaseView):
                 data.update(values)
             # callback if set
             if callable(serialize):
-                data = serialize(data, tn, self)
+                data = serialize(data, typeconf.id, self)
             result = setObject.Update(data=data, user=self.User())
             return {"result": result}
 
@@ -746,11 +746,15 @@ class APIv1(BaseView):
         maxBatchItems = self.context.app.configuration.get("maxBatchItems") or DefaultMaxBatchItems
         fields = (u"id",)
         viewconf = self.GetViewConf()
+        sort = None
+        order = None
         if viewconf and viewconf.get("settings"):
             fields = viewconf.settings.get("fields") or fields
             typename = viewconf.settings.get("type")
             deserialize = viewconf.settings.get("deserialize")
             maxBatchItems = viewconf.settings.get("maxBatchItems") or maxBatchItems
+            sort = viewconf.settings.get("sort")
+            order = viewconf.settings.get("order")
 
         values = self.GetFormValues()
         typename = typename or values.get("type") or values.get("pool_type")
@@ -771,15 +775,17 @@ class APIv1(BaseView):
             response.status = u"400 Invalid parameter"
             return {"error": "Invalid parameter: size", "items": []}
 
-        order = values.get("order",None)
+        order = values.get("order", order)
         if order == u"<":
             ascending = 1
         else:
             ascending = 0
 
-        sort = values.get("sort",None)
-        if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds()]:
+        sort = values.get("sort", sort)
+        if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds(False)]:
             if typename:
+                if self.context.app.GetObjectConf(typename) is None:
+                    raise TypeError("unknown type")
                 if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(typename)]:
                     sort = None
 
@@ -792,7 +798,7 @@ class APIv1(BaseView):
                                               ascending=ascending,
                                               sort=sort)
         if callable(deserialize):
-            data = deserialize(data, view)
+            data = deserialize(data, self)
         return {"items": data, "start": start}
 
 
@@ -817,6 +823,7 @@ class APIv1(BaseView):
         - *start*: if batched the current start number
         - *size*: maximum batch size
         - *total*: number of items in total
+        - *fields*: (list) a list of data fields used in search
 
         The return value is based on the linked renderer. By default the result is returned as json
         encoded result set: ::
@@ -857,7 +864,7 @@ class APIv1(BaseView):
                                # ...
                            }
 
-        - *dynamic*: (dict) these values values are extracted from the request. The values listed here are the defaults
+        - *dynamic*: (dict) these values are extracted from the request. The values listed here are the defaults
                      if not found in the request. The `dynamic` values are mixed with the fixed parameters and passed
                      to the query. If you need custom value processing use a callback with the `parameter` option.
         - *operators*: (dict) fieldname:operator entries used for search conditions. See `nive.search`.
@@ -865,6 +872,9 @@ class APIv1(BaseView):
         - *advanced*: (dict) search options like group restraints. See `nive.search` for details and all supported options.
         - *groups*: (string/list) use the groups defintion to restrict the execution to users assigned to one of the groups.
                     For customized views it is recommended to use the view permissions directly.
+        - *deserialize*: (callback) pluginpoint for a custom deserialization callback. The callback is invoked once for
+                         the whole result.
+                         Takes two parameters `items, view` and should return the processed items.
 
         Here is a simple example how to search for all bookmarks ::
 
@@ -927,13 +937,14 @@ class APIv1(BaseView):
 
         """
         response = self.request.response
-        profile = None
+        profile = deserialize = None
         maxBatchItems = self.context.app.configuration.get("maxBatchItems") or DefaultMaxBatchItems
 
         viewconf = self.GetViewConf()
         # look up the profile in two places
         if viewconf and viewconf.get("settings"):
             maxBatchItems = viewconf.settings.get("maxBatchItems") or maxBatchItems
+            deserialize = viewconf.settings.get("deserialize")
             # 1) in custom view definition
             profile = viewconf.settings
 
@@ -1015,7 +1026,7 @@ class APIv1(BaseView):
 
         if u"sort" in dynamic:
             sort = values.get("sort",None)
-            if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds()]:
+            if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds(False)]:
                 if typename:
                     if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(typename)]:
                         sort = None
@@ -1063,7 +1074,10 @@ class APIv1(BaseView):
         values = {"items": result["items"],
                   "start": result["start"]+1,
                   "size": result["count"],
-                  "total": result["total"]}
+                  "total": result["total"],
+                  "fields": fields}
+        if callable(deserialize):
+            values["items"] = deserialize(result["items"], self)
         return values
 
 
