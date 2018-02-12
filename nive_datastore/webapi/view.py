@@ -277,7 +277,7 @@ class APIv1(BaseView):
                 name="add-bookmark",
                 attr="newItem",
                 # ...
-                settings={"form": {"fields": ("link", "share", "comment")}
+                settings={"form": {"fields": ("link", "share", "comment")},
                           "type": "bookmark",
                           "maxStoreItems": 3,
                           "values": {"source": "webapi"}
@@ -314,7 +314,7 @@ class APIv1(BaseView):
             typename = viewconf.settings.get("type")
             values = viewconf.settings.get("values")
             serialize = viewconf.settings.get("serialize")
-            subset = viewconf.settings.get("subset") or subset
+            subset = viewconf.settings.get("form") or subset
             maxStoreItems = viewconf.settings.get("maxStoreItems") or maxStoreItems
 
         user = self.User()
@@ -474,7 +474,7 @@ class APIv1(BaseView):
             values = viewconf.settings.get("values")
             serialize = viewconf.settings.get("serialize")
             strict = viewconf.settings.get("strict")
-            subset = viewconf.settings.get("subset") or subset
+            subset = viewconf.settings.get("form") or subset
             maxStoreItems = viewconf.settings.get("maxStoreItems") or maxStoreItems
 
 
