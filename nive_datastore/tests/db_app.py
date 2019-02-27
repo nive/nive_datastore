@@ -5,20 +5,20 @@ import unittest
 
 
 from nive.utils.path import DvPath
-from nive.definitions import *
+from nive.definitions import ObjectConf, FieldConf, AppConf, DatabaseConf
 from nive.portal import Portal
 from nive_datastore.app import DataStorage
 
 
 collection1 = ObjectConf("nive_datastore.item",
     id = "bookmark",
-    name = u"Bookmarks",
+    name = "Bookmarks",
     dbparam = "bookmarks",
     subtypes="*",
     data = (
-        FieldConf(id="link",     datatype="url",  size=500,   default=u"",  name=u"Link url"),
-        FieldConf(id="share",    datatype="bool", size=2,     default=False,name=u"Share link"),
-        FieldConf(id="comment",  datatype="text", size=50000, default=u"",  name=u"Comment"),
+        FieldConf(id="link",     datatype="url",  size=500,   default="",  name="Link url"),
+        FieldConf(id="share",    datatype="bool", size=2,     default=False,name="Share link"),
+        FieldConf(id="comment",  datatype="text", size=50000, default="",  name="Comment"),
     ),
     forms = {
         "newItem": {"fields": ("link", "share", "comment"), "ajax":True, "newItem": True}, 
@@ -30,13 +30,13 @@ collection1 = ObjectConf("nive_datastore.item",
 
 collection2 = ObjectConf("nive_datastore.item",
     id = "track",
-    name = u"Track",
+    name = "Track",
     dbparam = "tracks",
     subtypes=None,
     data = (
-        FieldConf(id="url",       datatype="url",    size=500,   default=u"",  name=u"Url", required=True),
-        FieldConf(id="number",    datatype="number", size=8,     default=0,    name=u"Some number"),
-        FieldConf(id="something", datatype="text",   size=50000, default=u"",  name=u"Some text"),
+        FieldConf(id="url",       datatype="url",    size=500,   default="",  name="Url", required=True),
+        FieldConf(id="number",    datatype="number", size=8,     default=0,    name="Some number"),
+        FieldConf(id="something", datatype="text",   size=50000, default="",  name="Some text"),
     ),
     forms = {
         "newItem": {"fields": ("url", "number", "something"), "newItem": True }, 
@@ -105,10 +105,10 @@ def app_nodb():
 
 def create_bookmark(c, user):
     type = "bookmark"
-    data = {"link": u"the link", "comment": u"some text"}
+    data = {"link": "the link", "comment": "some text"}
     return c.Create(type, data=data, user=user)
 
 def create_track(c, user):
     type = "track"
-    data = {"url": u"the url", "number": 123, "something": u"some text"}
+    data = {"url": "the url", "number": 123, "something": "some text"}
     return c.Create(type, data=data, user=user)

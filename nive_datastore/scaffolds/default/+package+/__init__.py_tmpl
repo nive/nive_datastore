@@ -25,7 +25,7 @@ Please refer to :py:class:``nive.definitions.AppConf`` and :py:class:``nive.defi
 for all configuration options. 
 """
 storage = AppConf("nive_datastore.app",
-    title=u"Scaffold application", 
+    title="Scaffold application", 
     id="{{package}}",
 
     # search profile example
@@ -57,15 +57,15 @@ user information are automatically handled by the system.
 """
 todo = ObjectConf("nive_datastore.item",
     id = "todo",
-    name = u"Todo",
+    name = "Todo",
     dbparam = "todos",
     subtypes = None,
     data = (
-        FieldConf(id="text",     datatype="text", size=5000,  default=u"",  name=u"Todo", required=True),
-        FieldConf(id="done",     datatype="bool", size=2,     default=False,name=u"Done"),
-        FieldConf(id="archive",  datatype="bool", size=2,     default=False,name=u"Archive"),
-        FieldConf(id="note",     datatype="text", size=5000,  default=u"",  name=u"Note"),
-        FieldConf(id="todogroup",datatype="string",size=10,   default=u"",  name=u"Gruppe"),
+        FieldConf(id="text",     datatype="text", size=5000,  default="",  name="Todo", required=True),
+        FieldConf(id="done",     datatype="bool", size=2,     default=False,name="Done"),
+        FieldConf(id="archive",  datatype="bool", size=2,     default=False,name="Archive"),
+        FieldConf(id="note",     datatype="text", size=5000,  default="",  name="Note"),
+        FieldConf(id="todogroup",datatype="string",size=10,   default="",  name="Gruppe"),
     ),
     forms = {
         "newItem": {"fields": ("text","todogroup"), "ajax":True},
@@ -99,9 +99,9 @@ Please refer to :py:class:``nive.definitions.AppConf`` and :py:class:``nive.defi
 for all configuration options. 
 """
 userdb = AppConf("nive_userdb.app",
-    title = u"Userdatabase",
+    title = "Userdatabase",
     id = "userdb",
-    userAdmin = (u"{{adminemail}}", u"Admin"),
+    userAdmin = ("{{adminemail}}", "Admin"),
     admin = {"name": "{{adminuser}}", "password": base64.decodestring("{{adminpass}}"), "email": ""},
 
     # default settings
@@ -114,10 +114,10 @@ userdb = AppConf("nive_userdb.app",
     ),
 
     # mails
-    #mailSignup=Mail(_(u"Signup confirmed"), "nive_userdb:userview/signupmail.pt"),
-    #mailNotify=Mail(_(u"Signup notification"), "nive_userdb:userview/notifymail.pt"),
-    #mailResetPass=Mail(_(u"Your new password"), "nive_userdb:userview/resetpassmail.pt"),
-    #mailSendPass=Mail(_(u"Your password"), "nive_userdb:userview/mailpassmail.pt"),
+    #mailSignup=Mail(_("Signup confirmed"), "nive_userdb:userview/signupmail.pt"),
+    #mailNotify=Mail(_("Signup notification"), "nive_userdb:userview/notifymail.pt"),
+    #mailResetPass=Mail(_("Your new password"), "nive_userdb:userview/resetpassmail.pt"),
+    #mailSendPass=Mail(_("Your password"), "nive_userdb:userview/mailpassmail.pt"),
 )
 dbConfiguration = DatabaseConf(
     fileRoot="{{root}}/filesuserdb",

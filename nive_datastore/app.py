@@ -39,7 +39,7 @@ Database connection and basic datastore application configuration
     )
     dbConfiguration = DatabaseConf(
         fileRoot="/var/opt/datastore",
-        context=u"Sqlite3",
+        context="Sqlite3",
         dbName="/var/opt/datastore/items.db"
     )
     app.modules.append(dbConfiguration)
@@ -54,12 +54,12 @@ A simple example. Stores a bookmark and comment: ::
 
     bookmark = ObjectConf(
         id = "bookmark",
-        name = _(u"Bookmarks"),
+        name = _("Bookmarks"),
         dbparam = "bookmarks",
         data = (
-          FieldConf(id="link",     datatype="url",  size=500,   default=u"",  name=u"Link url"),
-          FieldConf(id="share",    datatype="bool", size=2,     default=False,name=u"Share link"),
-          FieldConf(id="comment",  datatype="text", size=50000, default=u"",  name=u"Comment")
+          FieldConf(id="link",     datatype="url",  size=500,   default="",  name="Link url"),
+          FieldConf(id="share",    datatype="bool", size=2,     default=False,name="Share link"),
+          FieldConf(id="comment",  datatype="text", size=50000, default="",  name="Comment")
         ),
         forms = {
           "newItem": {"fields": ("link", "share", "comment") }, 
@@ -111,16 +111,16 @@ database fields used for all collections use `nive.definitions.AppConf.meta`.
 import copy
 
 from nive_datastore.i18n import _
-from nive.definitions import implements, Interface
-from nive.definitions import AppConf, FieldConf, GroupConf
+from nive.definitions import implementer, Interface
+from nive.definitions import AppConf, GroupConf
 from nive.definitions import SystemFlds, UserFlds, WorkflowFlds
 from nive.security import ALL_PERMISSIONS, Allow, Everyone, Deny
-from nive.components.objects.base import ApplicationBase
+from nive.application import Application
 
 #@nive_module
 configuration = AppConf(
     id = "storage",
-    title = u"Nive Data Storage",
+    title = "Nive Data Storage",
     context = "nive_datastore.app.DataStorage",
     workflowEnabled = True,
     meta = copy.deepcopy(list(SystemFlds)) + copy.deepcopy(list(UserFlds)) + copy.deepcopy(list(WorkflowFlds)),
@@ -145,7 +145,7 @@ configuration.modules = [
     "nive.tools.dbStructureUpdater", "nive.tools.cmsstatistics",
     "nive.tools.exportJson", "nive.tools.dbSqlDump", "nive.tools.dbJsonDump", 
     # administration and persistence
-    "nive.adminview",
+    "nive.components.adminview",
     "nive.extensions.persistence.dbPersistenceConfiguration"
 ]
 
@@ -168,9 +168,10 @@ configuration.groups = [
 class IDataStorage(Interface):
     """
     """
-    
-class DataStorage(ApplicationBase):
+
+@implementer(IDataStorage)
+class DataStorage(Application):
     """ the main cms application class """
-    implements(IDataStorage)
-    
+
+
     

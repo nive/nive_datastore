@@ -33,7 +33,6 @@ handles virtual request and reponse objects for view processing:
 import json
 
 from pyramid.view import render_view
-from pyramid.httpexceptions import HTTPForbidden
 from pyramid import testing
 
 

@@ -12,7 +12,7 @@ class ConfTests(unittest.TestCase):
 
 	def test_configuration(self):
 		r={{project}}.storage.test()
-		self.assert_(len(r)==0, FormatConfTestFailure(r))
+		self.assertTrue(len(r)==0, FormatConfTestFailure(r))
 
 
 if __name__ == '__main__':

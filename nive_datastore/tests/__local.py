@@ -12,13 +12,12 @@ from nive_datastore.tests import db_app
 WIN = sys.platform.startswith("win")
 
 if WIN:
-    ROOT = "c:\\Temp\\nive_datastore\\"
+    ROOT = "c:\\Temp\\nive_datastore3-test\\"
 else:
-    ROOT = "/var/tmp/nive_datastore/"
-
+    ROOT = "/tmp/nive_datastore3-test/"
 
 DB_CONF = DatabaseConf(
-    dbName = ROOT+"datastore.db",
+    dbName = ROOT+"test.db",
     fileRoot = ROOT,
     context = "Sqlite3"
 )

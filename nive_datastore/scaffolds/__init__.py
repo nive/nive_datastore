@@ -1,10 +1,7 @@
-import binascii
-import os
+
 import getpass
 import uuid
 import base64
-
-from pyramid.compat import native_
 
 from pyramid.scaffolds import PyramidTemplate # API
 from pyramid.scaffolds.template import Template
@@ -23,7 +20,7 @@ class DatastoreSqliteTemplate(PyramidTemplate):
         # configuration
         user = None
         while not user:
-            user = raw_input("Admin username: ")
+            user = input("Admin username: ")
         vars['adminuser'] = user
     
         pprompt = lambda: (getpass.getpass('Password: '), getpass.getpass('Retype password: '))
@@ -35,10 +32,10 @@ class DatastoreSqliteTemplate(PyramidTemplate):
         
         vars['adminpass'] = base64.standard_b64encode(p1)
 
-        mail = raw_input("Admin email: ")
+        mail = input("Admin email: ")
         vars['adminemail'] = str(mail)
         
-        vars['root'] = raw_input("Root directory for files (default data): ")
+        vars['root'] = input("Root directory for files (default data): ")
         if not vars['root']:
             vars['root'] = "data"
 
@@ -47,7 +44,7 @@ class DatastoreSqliteTemplate(PyramidTemplate):
         vars['param_user'] = """context="Sqlite3", dbName="%(root)s/userdb.db" """ % vars
         vars['dbPackage'] = ''
         
-        vars['language'] = raw_input("Locale name. Please choose english-> en or german-> de: ")
+        vars['language'] = input("Locale name. Please choose english-> en or german-> de: ")
         
         vars['authsecret'] = str(uuid.uuid4())
         vars['cookiesecret'] = str(uuid.uuid4())
@@ -69,7 +66,7 @@ class DatastoreMysqlTemplate(PyramidTemplate):
         # configuration
         user = None
         while not user:
-            user = raw_input("Admin username: ")
+            user = input("Admin username: ")
         vars['adminuser'] = user
         
         pprompt = lambda: (getpass.getpass('Password: '), getpass.getpass('Retype password: '))
@@ -81,30 +78,30 @@ class DatastoreMysqlTemplate(PyramidTemplate):
             
         vars['adminpass'] = base64.standard_b64encode(p1)
         
-        mail = raw_input("Admin email: ")
+        mail = input("Admin email: ")
         vars['adminemail'] = str(mail)
 
-        print "Please enter MySql database settings for the datastore. Two databases will be used, one for collections ",
-        print "and one to store userdata. Host, port, user and password are used for both databases."
-        print ""
-        print "The datastore will create all required database tables and columns automatically when starting the webserver."
-        print "These manual administrator actions are required after running this installation script:"
-        print "- Create the two databases"
-        print "- Assign create and alter table rights to the database user"
+        print("Please enter MySql database settings for the datastore. Two databases will be used, one for collections ")
+        print("and one to store userdata. Host, port, user and password are used for both databases.")
+        print("")
+        print("The datastore will create all required database tables and columns automatically when starting the webserver.")
+        print("These manual administrator actions are required after running this installation script:")
+        print("- Create the two databases")
+        print("- Assign create and alter table rights to the database user")
         
-        vars['root'] = raw_input("Root directory for files (default data): ")
+        vars['root'] = input("Root directory for files (default data): ")
         if not vars['root']:
             vars['root'] = "data"
             
-        vars['dbcontentname'] = raw_input("Datastore database name (default %s): " % vars["project"])
+        vars['dbcontentname'] = input("Datastore database name (default %s): " % vars["project"])
         if not vars['dbcontentname']:
             vars['dbcontentname'] = vars["project"]
-        vars['dbusername'] = raw_input("User database name (default %s_user): "% vars["project"])
+        vars['dbusername'] = input("User database name (default %s_user): "% vars["project"])
         if not vars['dbusername']:
             vars['dbusername'] = vars["project"]+"_user"
-        vars['dbhost'] = raw_input("MySql database host (default localhost): ")
-        vars['dbport'] = raw_input("MySql database port (leave empty to use default): ")
-        vars['dbuser'] = raw_input("MySql database user: ")
+        vars['dbhost'] = input("MySql database host (default localhost): ")
+        vars['dbport'] = input("MySql database port (leave empty to use default): ")
+        vars['dbuser'] = input("MySql database user: ")
             
         pprompt = lambda: (getpass.getpass('Password: '), getpass.getpass('Retype password: '))
     
@@ -115,7 +112,7 @@ class DatastoreMysqlTemplate(PyramidTemplate):
 
         vars['dbpass'] = base64.standard_b64encode(p1)
         
-        vars['language'] = raw_input("Locale name. Please choose english-> en or german-> de: ")
+        vars['language'] = input("Locale name. Please choose english-> en or german-> de: ")
 
         vars['comment'] = "# MySql "
         vars['param_datastore'] = """context="MySql",
@@ -153,7 +150,7 @@ class DatastorePostgresTemplate(PyramidTemplate):
         # configuration
         user = None
         while not user:
-            user = raw_input("Admin username: ")
+            user = input("Admin username: ")
         vars['adminuser'] = user
 
         pprompt = lambda: (getpass.getpass('Password: '), getpass.getpass('Retype password: '))
@@ -165,30 +162,30 @@ class DatastorePostgresTemplate(PyramidTemplate):
 
         vars['adminpass'] = base64.standard_b64encode(p1)
 
-        mail = raw_input("Admin email: ")
+        mail = input("Admin email: ")
         vars['adminemail'] = str(mail)
 
-        print "Please enter PostgreSQL database settings for the website. Two databases will be used, one for website contents ",
-        print "and one to store userdata. Host, port, user and password are used for both databases."
-        print ""
-        print "The cms will create all required database tables and columns automatically when starting the webserver."
-        print "These manual administrator actions are required after running this installation script:"
-        print "- Create the two databases"
-        print "- Assign create and alter table rights to the database user"
+        print("Please enter PostgreSQL database settings for the website. Two databases will be used, one for website contents ")
+        print("and one to store userdata. Host, port, user and password are used for both databases.")
+        print("")
+        print("The cms will create all required database tables and columns automatically when starting the webserver.")
+        print("These manual administrator actions are required after running this installation script:")
+        print("- Create the two databases")
+        print("- Assign create and alter table rights to the database user")
 
-        vars['root'] = raw_input("Root directory for files (default data): ")
+        vars['root'] = input("Root directory for files (default data): ")
         if not vars['root']:
             vars['root'] = "data"
 
-        vars['dbcontentname'] = raw_input("Content database name (default %s): " % vars["project"])
+        vars['dbcontentname'] = input("Content database name (default %s): " % vars["project"])
         if not vars['dbcontentname']:
             vars['dbcontentname'] = vars["project"]
-        vars['dbusername'] = raw_input("User database name (default %s_user): "% vars["project"])
+        vars['dbusername'] = input("User database name (default %s_user): "% vars["project"])
         if not vars['dbusername']:
             vars['dbusername'] = vars["project"]+"_user"
-        vars['dbhost'] = raw_input("PostgreSQL database host (default localhost): ")
-        vars['dbport'] = raw_input("PostgreSQL database port (leave empty to use default): ")
-        vars['dbuser'] = raw_input("postgreSql database user: ")
+        vars['dbhost'] = input("PostgreSQL database host (default localhost): ")
+        vars['dbport'] = input("PostgreSQL database port (leave empty to use default): ")
+        vars['dbuser'] = input("postgreSql database user: ")
 
         pprompt = lambda: (getpass.getpass('Password: '), getpass.getpass('Retype password: '))
 
@@ -199,7 +196,7 @@ class DatastorePostgresTemplate(PyramidTemplate):
 
         vars['dbpass'] = base64.standard_b64encode(p1)
 
-        vars['language'] = raw_input("Locale name. Please choose english-> en (default), german-> de or french-> fr: ")
+        vars['language'] = input("Locale name. Please choose english-> en (default), german-> de or french-> fr: ")
 
         vars['comment'] = "# PostgreSQL "
         vars['param_datastore'] = """context="PostgreSQL",

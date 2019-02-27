@@ -16,13 +16,13 @@ class TestConf(unittest.TestCase):
         r=view.configuration.test()
         if not r:
             return
-        print FormatConfTestFailure(r)
+        print(FormatConfTestFailure(r))
         self.assert_(False, "Configuration Error")
 
     def test_confitems(self):
         r=view.localstorage_views.test()
         if not r:
             return
-        print FormatConfTestFailure(r)
+        print(FormatConfTestFailure(r))
         self.assert_(False, "Configuration Error")
 

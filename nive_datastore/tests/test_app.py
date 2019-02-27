@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import time
 import unittest
 
 from nive.security import User
@@ -8,7 +7,6 @@ from nive.definitions import ContainmentError
 from nive_datastore.app import DataStorage, IDataStorage
 from nive_datastore.tests import db_app
 from nive_datastore.tests import __local
-from nive_datastore.tests.__local import DB_CONF, MYSQL_CONF
 
 
 class AppTest_db(object):
@@ -18,17 +16,17 @@ class AppTest_db(object):
         self.remove = []
         
     def tearDown(self):
-        u = User(u"test")
+        u = User("test")
         u.groups.append("group:manager")
-        root = self.app.root()
+        root = self.app.root
         for r in self.remove:
             root.Delete(r, u)
         self.app.Close()
 
     def test_realdata(self):
         ccc = self.app.db.GetCountEntries()
-        r = self.app.root()
-        user = User(u"test")
+        r = self.app.root
+        user = User("test")
         user.groups.append("group:manager")
         # add to root
         o1 = db_app.create_bookmark(r, user)
@@ -46,8 +44,8 @@ class AppTest_db(object):
 
     def test_realdata_container(self):
         ccc = self.app.db.GetCountEntries()
-        r=self.app.root()
-        user = User(u"test")
+        r=self.app.root
+        user = User("test")
         user.groups.append("group:manager")
         # add to root
         o1 = db_app.create_bookmark(r, user)
@@ -71,7 +69,7 @@ class AppTest_db(object):
 
     def test_interfaces(self):
         self.assertFalse(IDataStorage.providedBy(123))
-        self.assert_(IDataStorage.providedBy(DataStorage(None)))
+        self.assertTrue(IDataStorage.providedBy(DataStorage(None)))
         
         
     def test_app(self):

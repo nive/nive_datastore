@@ -12,12 +12,12 @@ Also this object provides search functions and sql query wrappers.
 """
 
 from nive_datastore.i18n import _
-from nive.components.objects.base import RootBase
+from nive.container import Root
 from nive.definitions import RootConf
 from nive.definitions import AllTypesAllowed
 
 
-class root(RootBase):
+class root(Root):
 
     def Init(self):
         self.queryRestraints = {}, {}
@@ -33,6 +33,6 @@ configuration = RootConf(
     default = True,
     subtypes = AllTypesAllowed,
     extensions = ("nive_datastore.pydispatch.Dispatcher",),
-    name = _(u"Data root"),
-    description = u""
+    name = _("Data root"),
+    description = ""
 )

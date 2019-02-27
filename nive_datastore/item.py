@@ -7,11 +7,11 @@ Item
 """
 
 from nive_datastore.i18n import _
-from nive.components.baseobjects import ObjectContainerBase
+from nive.container import Container
 from nive.definitions import ObjectConf
 
 
-class item(ObjectContainerBase):
+class item(Container):
 
     def Init(self):
         self.queryRestraints = {}, {}
@@ -25,6 +25,6 @@ configuration = ObjectConf(
     id = "item",
     context = "nive_datastore.item.item",
     extensions = ("nive_datastore.pydispatch.Dispatcher",),
-    name = _(u"Data item"),
-    description = u""
+    name = _("Data item"),
+    description = ""
 )

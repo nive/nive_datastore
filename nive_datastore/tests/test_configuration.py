@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import time
 import unittest
 
 from nive.helper import FormatConfTestFailure
@@ -22,19 +21,19 @@ class TestConf(unittest.TestCase):
         r=app.configuration.test()
         if not r:
             return
-        print FormatConfTestFailure(r)
+        print(FormatConfTestFailure(r))
         self.assert_(False, "Configuration Error")
 
     def test_conf2(self):
         r=root.configuration.test()
         if not r:
             return
-        print FormatConfTestFailure(r)
+        print(FormatConfTestFailure(r))
         self.assert_(False, "Configuration Error")
 
     def test_conf3(self):
         r=item.configuration.test()
         if not r:
             return
-        print FormatConfTestFailure(r)
+        print(FormatConfTestFailure(r))
         self.assert_(False, "Configuration Error")

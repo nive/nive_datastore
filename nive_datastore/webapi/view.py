@@ -1,10 +1,6 @@
 # Copyright 2012-2014 Arndt Droullier, Nive GmbH. All rights reserved.
 # Released under GPL3. See license.txt
 
-import time
-import logging
-import json
-import copy
 import inspect
 
 from pyramid.httpexceptions import HTTPForbidden
@@ -17,12 +13,12 @@ from nive.definitions import ConfigurationError
 
 from nive.workflow import WorkflowNotAllowed
 from nive.views import BaseView
-from nive.forms import Form, ObjectForm, MakeCustomizedViewForm
+from nive.components.reform.forms import MakeCustomizedViewForm
 from nive.security import Allow, Everyone, Authenticated, ALL_PERMISSIONS
-from nive.helper import JsonDataEncoder
 from nive.helper import ResolveName
 
 from nive_datastore.i18n import _
+import collections
 
 # view module definition ------------------------------------------------------------------
 
@@ -33,7 +29,7 @@ _io = "nive.definitions.IObject"
 #@nive_module
 configuration = ViewModuleConf(
     id = "DatastoreAPIv1",
-    name = u"Data storage api",
+    name = "Data storage api",
     containment = "nive_datastore.app.IDataStorage",
     view = "nive_datastore.webapi.view.APIv1",
     views = (
@@ -91,7 +87,7 @@ configuration = ViewModuleConf(
 #@nive_module
 localstorage_views = ViewModuleConf(
     id = "DatastoreAPIv1-Localstorage",
-    name = u"Data storage Localstorage api",
+    name = "Data storage Localstorage api",
     containment = "nive_datastore.app.IDataStorage",
     view = "nive_datastore.webapi.view.APIv1",
     context = "nive.definitions.IContainer",
@@ -113,7 +109,7 @@ localstorage_views = ViewModuleConf(
 
 DefaultMaxStoreItems = 50
 DefaultMaxBatchItems = 100
-jsUndefined = (u"", u"null", u"undefined", None)
+jsUndefined = ("", "null", "undefined", None)
 
 
 class APIv1(BaseView):
@@ -221,13 +217,13 @@ class APIv1(BaseView):
                 id = [int(id)]
             except (ValueError, TypeError):
                 # set http response code (invalid request)
-                self.request.response.status = u"400 Invalid id"
-                return {"error": u"Invalid id"}
+                self.request.response.status = "400 Invalid id"
+                return {"error": "Invalid id"}
 
         if isinstance(id, (list, tuple)) and len(id)==0:
             # set http response code (invalid request)
-            self.request.response.status = u"400 Empty id"
-            return {"error": u"Empty id"}
+            self.request.response.status = "400 Empty id"
+            return {"error": "Empty id"}
 
         items = []
         cnt = 0
@@ -241,7 +237,7 @@ class APIv1(BaseView):
 
         # turn into json
         items = DeserializeItems(self, items, fields, render)
-        if callable(deserialize):
+        if isinstance(deserialize, collections.abc.Callable):
             return deserialize(items, self)
         return items
 
@@ -303,9 +299,9 @@ class APIv1(BaseView):
         view the type can be part of the views options slot ``settings={"type": "bookmark"}``.
         """
         # lookup settings
-        typename = u""
+        typename = ""
         values = serialize = None
-        subset = u"newItem"
+        subset = "newItem"
         maxStoreItems = self.context.app.configuration.get("maxStoreItems") or DefaultMaxStoreItems
 
         # look up the new type and validation fields in custom view definition
@@ -324,14 +320,14 @@ class APIv1(BaseView):
             # create a single item
             data = self.GetFormValues()
             if not typename:
-                typename = data.get(u"type") or data.get(u"pool_type")
+                typename = data.get("type") or data.get("pool_type")
                 if not typename:
-                    response.status = u"400 No type given"
-                    return {"error": u"No type given", "result":[]}
-            typeconf = self.context.app.GetObjectConf(typename)
+                    response.status = "400 No type given"
+                    return {"error": "No type given", "result":[]}
+            typeconf = self.context.app.configurationQuery.GetObjectConf(typename)
             if not typeconf:
-                response.status = u"400 Unknown type"
-                return {"error": u"Unknown type", "result":[]}
+                response.status = "400 Unknown type"
+                return {"error": "Unknown type", "result":[]}
 
             # set up the form. subset might be the form configuration up to here.
             form, subset = MakeCustomizedViewForm(view=self,
@@ -343,7 +339,7 @@ class APIv1(BaseView):
             form.Setup(subset=subset)
             result, data, errors = form.ValidateSchema(data)
             if not result:
-                response.status = u"400 Validation error"
+                response.status = "400 Validation error"
                 return {"error": str(errors), "result":[]}
 
             #values = SerializeItem(self, values, typeconf)
@@ -351,13 +347,13 @@ class APIv1(BaseView):
                 data.update(values)
             item = self.context.Create(typename, data=data, user=user)
             if not item:
-                response.status = u"400 Validation error"
-                return {"error": u"Validation error", "result":[]}
+                response.status = "400 Validation error"
+                return {"error": "Validation error", "result":[]}
             return {"result": [item.id]}
 
         if len(items) > maxStoreItems:
-            response.status = u"413 Too many items"
-            return {"error": u"Too many items.", "result":[]}
+            response.status = "413 Too many items"
+            return {"error": "Too many items.", "result":[]}
 
         validated = []
         errors = []
@@ -365,20 +361,20 @@ class APIv1(BaseView):
         for data in items:
             cnt += 1
             if isinstance(typename, (list, tuple)):
-                tn = data.get(u"type") or data.get(u"pool_type")
+                tn = data.get("type") or data.get("pool_type")
                 if not tn in typename:
-                    errors.append(u"Invalid type: "+tn)
+                    errors.append("Invalid type: "+tn)
                     continue
             else:
-                tn = typename or data.get(u"type") or data.get(u"pool_type")
+                tn = typename or data.get("type") or data.get("pool_type")
 
             if not tn:
-                errors.append(u"No type given: "+str(cnt))
+                errors.append("No type given: "+str(cnt))
                 continue
 
-            typeconf = self.context.app.GetObjectConf(tn)
+            typeconf = self.context.app.configurationQuery.GetObjectConf(tn)
             if not typeconf:
-                errors.append(u"Unknown type")
+                errors.append("Unknown type")
                 continue
 
             # set up the form. subset might be the form configuration up to here.
@@ -399,7 +395,7 @@ class APIv1(BaseView):
 
             if isinstance(values, dict):
                 data.update(values)
-            if callable(serialize):
+            if isinstance(serialize, collections.abc.Callable):
                 try:
                     data = serialize(data, tn, self)
                 except ValueError:
@@ -490,11 +486,11 @@ class APIv1(BaseView):
                 else:
                     setObject = self.context
             if not setObject:
-                self.request.response.status = u"404 Not found"
-                return {"error": u"Not found", "result": []}
+                self.request.response.status = "404 Not found"
+                return {"error": "Not found", "result": []}
             if not self.Allowed("api-setItem", setObject):
-                self.request.response.status = u"403 Not allowed"
-                return {"error": u"Not allowed", "result": []}
+                self.request.response.status = "403 Not allowed"
+                return {"error": "Not allowed", "result": []}
 
             typeconf = setObject.configuration
             # set up the form. subset might be the form configuration up to here.
@@ -507,13 +503,13 @@ class APIv1(BaseView):
             form.Setup(subset=subset)
             result, data, errors = form.ValidateSchema(self.GetFormValues())
             if not result:
-                self.request.response.status = u"400 Validation error"
+                self.request.response.status = "400 Validation error"
                 return {"error": errors, "result": []}
             # update configured values
             if values is not None:
                 data.update(values)
             # callback if set
-            if callable(serialize):
+            if isinstance(serialize, collections.abc.Callable):
                 data = serialize(data, typeconf.id, self)
             result = setObject.Update(data=data, user=self.User())
             return {"result": result}
@@ -522,12 +518,12 @@ class APIv1(BaseView):
         user = self.User()
 
         if not items or isinstance(items, dict):
-            response.status = u"400 Validation error"
-            return {"error": u"items: Not a list", "result": []}
+            response.status = "400 Validation error"
+            return {"error": "items: Not a list", "result": []}
 
         if len(items) > maxStoreItems:
-            response.status = u"413 Too many items"
-            return {"error": u"Too many items.", "result": []}
+            response.status = "413 Too many items"
+            return {"error": "Too many items.", "result": []}
         
         validated = []
         errors = []
@@ -635,57 +631,57 @@ class APIv1(BaseView):
             maxStoreItems = viewconf.settings.get("maxDeleteItems") or maxStoreItems
 
         if confirmation and self.GetFormValue("confirmation")!=confirmation:
-            return {"result": [], "error": u"Please confirm."}
+            return {"result": [], "error": "Please confirm."}
 
         if strict:
             # delete the context itself
             user = self.User()
             obj = self.context
             if not recursive:
-                sub = self.context.root().Select(parameter={"pool_unitref":obj.id}, fields=["id"], max=2)
+                sub = self.context.search.Select(parameter={"pool_unitref":obj.id}, fields=["id"], max=2)
                 if sub:
                     # not empty -> return
-                    return {"result": [], "error": u"Not empty"}
+                    return {"result": [], "error": "Not empty"}
             id = obj.id
             result = self.context.parent.Delete(obj, user=user)
             #del obj
             if result:
                 return {"result": [id]}
-            return {"result": [], "error": u"Sorry. Delete failed."}
+            return {"result": [], "error": "Sorry. Delete failed."}
 
         else:
             ids = self.GetFormValue("id")
 
         if not ids:
             # set http response code (invalid request)
-            response.status = u"400 Empty id"
-            return {"error": u"Empty id", "result": []}
+            response.status = "400 Empty id"
+            return {"error": "Empty id", "result": []}
 
         if not isinstance(ids, list):
             try:
                 ids = [int(ids)]
             except ValueError:
                 # set http response code (invalid request)
-                response.status = u"400 Invalid id"
-                return {"error": u"Invalid id.", "result": []}
+                response.status = "400 Invalid id"
+                return {"error": "Invalid id.", "result": []}
 
         if len(ids) > maxStoreItems:
-            response.status = u"413 Too many items"
-            return {"error": u"Too many items.", "result": []}
+            response.status = "413 Too many items"
+            return {"error": "Too many items.", "result": []}
 
         deleted = []
-        error = u""
+        error = ""
         user = self.User()
-        root = self.context.root()
+        root = self.context.dataroot
         for obj in self.context.GetObjsBatch(ids):
             if not self.Allowed("api-delete", obj):
-                error = u"Not allowed"
+                error = "Not allowed"
                 continue
             if not recursive:
-                sub = root.Select(parameter={"pool_unitref":obj.id}, fields=["id"], max=2)
+                sub = root.search.Select(parameter={"pool_unitref":obj.id}, fields=["id"], max=2)
                 if sub:
                     # not empty -> continue
-                    error = u"Not empty"
+                    error = "Not empty"
                     continue
             id = obj.id
             result = self.context.Delete(obj, user=user)
@@ -744,7 +740,7 @@ class APIv1(BaseView):
         response = self.request.response
         typename = deserialize = None
         maxBatchItems = self.context.app.configuration.get("maxBatchItems") or DefaultMaxBatchItems
-        fields = (u"id",)
+        fields = ("id",)
         viewconf = self.GetViewConf()
         sort = None
         order = None
@@ -760,44 +756,44 @@ class APIv1(BaseView):
         typename = typename or values.get("type") or values.get("pool_type")
 
         try:
-            start = ExtractJSValue(values, u"start", 0, "int")
+            start = ExtractJSValue(values, "start", 0, "int")
         except ValueError:
             # set http response code (invalid request)
-            response.status = u"400 Invalid parameter"
+            response.status = "400 Invalid parameter"
             return {"error": "Invalid parameter: start", "items": []}
 
         try:
-            size = ExtractJSValue(values, u"size", maxBatchItems, "int")
+            size = ExtractJSValue(values, "size", maxBatchItems, "int")
             if size > maxBatchItems:
                 size = maxBatchItems
         except ValueError:
             # set http response code (invalid request)
-            response.status = u"400 Invalid parameter"
+            response.status = "400 Invalid parameter"
             return {"error": "Invalid parameter: size", "items": []}
 
         order = values.get("order", order)
-        if order == u"<":
+        if order == "<":
             ascending = 1
         else:
             ascending = 0
 
         sort = values.get("sort", sort)
-        if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds(False)]:
+        if not sort in [v["id"] for v in self.context.app.configurationQuery.GetAllMetaFlds(False)]:
             if typename:
-                if self.context.app.GetObjectConf(typename) is None:
+                if self.context.app.configurationQuery.GetObjectConf(typename) is None:
                     raise TypeError("unknown type")
-                if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(typename)]:
+                if not sort in [v["id"] for v in self.context.app.configurationQuery.GetAllObjectFlds(typename)]:
                     sort = None
 
         parameter = {"pool_unitref": self.context.id}
-        data = self.context.dataroot.Select(typename,
+        data = self.context.dataroot.search.Select(typename,
                                               parameter=parameter,
                                               fields=fields,
                                               start=start,
                                               max=size,
                                               ascending=ascending,
                                               sort=sort)
-        if callable(deserialize):
+        if isinstance(deserialize, collections.abc.Callable):
             data = deserialize(data, self)
         return {"items": data, "start": start}
 
@@ -952,16 +948,16 @@ class APIv1(BaseView):
             # 2) in app.configuration.search
             profiles = self.context.app.configuration.get("search")
             if not profiles:
-                response.status = u"400 No search profiles found"
+                response.status = "400 No search profiles found"
                 return {"error": "No search profiles found", "items":[]}
 
-            profilename = self.GetFormValue("profile", u"default")
+            profilename = self.GetFormValue("profile", "default")
             if not profilename:
-                response.status = u"400 Empty search profile name"
+                response.status = "400 Empty search profile name"
                 return {"error": "Empty search profile name", "items":[]}
             profile = profiles.get(profilename)
             if not profile:
-                response.status = u"400 Unknown profile"
+                response.status = "400 Unknown profile"
                 return {"error": "Unknown profile", "items":[]}
 
         if profile.get("groups"):
@@ -969,7 +965,7 @@ class APIv1(BaseView):
             user = self.User()
             #TODO check local groups
             if not user or not user.InGroups(grps):
-                raise HTTPForbidden, "Profile not allowed"
+                raise HTTPForbidden("Profile not allowed")
 
         # get dynamic values
         values = {}
@@ -978,45 +974,45 @@ class APIv1(BaseView):
         if dynamic:
             ie = profile.get("ignoreEmpty")
             # values treated as empty
-            null = (u"", None)
-            for dynfield, dynvalue in dynamic.items():
+            null = ("", None)
+            for dynfield, dynvalue in list(dynamic.items()):
                 value = web.get(dynfield, dynvalue)
                 if value in null:
                     continue
                 values[dynfield] = value
 
-        if u"start" in dynamic:
+        if "start" in dynamic:
             try:
-                start = ExtractJSValue(values, u"start", 0, "int")
+                start = ExtractJSValue(values, "start", 0, "int")
             except ValueError:
                 # set http response code (invalid request)
-                response.status = u"400 Invalid parameter"
+                response.status = "400 Invalid parameter"
                 return {"error": "Invalid parameter: start", "items":[]}
-            del values[u"start"]
+            del values["start"]
         else:
             start = profile.get("start",0)
 
-        if u"size" in dynamic:
+        if "size" in dynamic:
             try:
-                size = ExtractJSValue(values, u"size", maxBatchItems, "int")
+                size = ExtractJSValue(values, "size", maxBatchItems, "int")
                 if size > maxBatchItems:
                     size = maxBatchItems
             except ValueError:
                 # set http response code (invalid request)
-                response.status = u"400 Invalid parameter"
+                response.status = "400 Invalid parameter"
                 return {"error": "Invalid parameter: size", "items":[]}
-            del values[u"size"]
+            del values["size"]
         else:
             size = profile.get("size", maxBatchItems)
 
-        if u"order" in dynamic:
+        if "order" in dynamic:
             order = values.get("order",None)
-            del values[u"order"]
+            del values["order"]
         else:
             order = profile.get("order")
-        if order == u"<":
+        if order == "<":
             ascending = 1
-        elif order == u">":
+        elif order == ">":
             ascending = 0
         else:
             ascending = None
@@ -1024,24 +1020,24 @@ class APIv1(BaseView):
         # fixed values
         typename = profile.get("type") or profile.get("pool_type")
 
-        if u"sort" in dynamic:
+        if "sort" in dynamic:
             sort = values.get("sort",None)
-            if not sort in [v["id"] for v in self.context.app.GetAllMetaFlds(False)]:
+            if not sort in [v["id"] for v in self.context.app.configurationQuery.GetAllMetaFlds(False)]:
                 if typename:
-                    if not sort in [v["id"] for v in self.context.app.GetAllObjectFlds(typename)]:
+                    if not sort in [v["id"] for v in self.context.app.configurationQuery.GetAllObjectFlds(typename)]:
                         sort = None
-            del values[u"sort"]
+            del values["sort"]
         else:
             sort = profile.get("sort")
 
         # get the configured parameters. if it is a callable call it with current
         # request and context.
         p = profile.get("parameter", None)
-        if callable(p):
-            if "view" in inspect.getargspec(p).args:
-                p = apply(p, (self.context, self.request, self))
+        if isinstance(p, collections.abc.Callable):
+            if "view" in inspect.getfullargspec(p).args:
+                p = p(*(self.context, self.request, self))
             else:
-                p = apply(p, (self.context, self.request))
+                p = p(*(self.context, self.request))
         if p:
             values.update(p)
 
@@ -1068,15 +1064,15 @@ class APIv1(BaseView):
 
         # run the query and handle the result
         if typename:
-            result = self.context.dataroot.SearchType(typename, parameter=parameter, fields=fields, operators=operators, **kws)
+            result = self.context.dataroot.search.SearchType(typename, parameter=parameter, fields=fields, operators=operators, **kws)
         else:
-            result = self.context.dataroot.Search(parameter=parameter, fields=fields, operators=operators, **kws)
+            result = self.context.dataroot.search.Search(parameter=parameter, fields=fields, operators=operators, **kws)
         values = {"items": result["items"],
                   "start": result["start"]+1,
                   "size": result["count"],
                   "total": result["total"],
                   "fields": fields}
-        if callable(deserialize):
+        if isinstance(deserialize, collections.abc.Callable):
             values["items"] = deserialize(result["items"], self)
         return values
 
@@ -1169,16 +1165,16 @@ class APIv1(BaseView):
 
             profiles = self.context.app.configuration.get("subtree")
             if not profiles:
-                status = u"400 No subtree profile found"
+                status = "400 No subtree profile found"
                 return returnError({"error": "No subtree profile found"}, status)
 
             profilename = self.GetFormValue("profile") or self.context.app.configuration.get("defaultSubtree")
             if not profilename:
-                status = u"400 Empty subtree profile name"
+                status = "400 Empty subtree profile name"
                 return returnError({"error": "Empty subtree profile name"}, status)
             profile = profiles.get(profilename)
             if not profile:
-                status = u"400 Unknown profile"
+                status = "400 Unknown profile"
                 return returnError({"error": "Unknown profile"}, status)
 
         if isinstance(profile, dict):
@@ -1191,7 +1187,7 @@ class APIv1(BaseView):
     def _renderTree(self, context, profile):
         # cache field ids and types
         fields = {}
-        for conf in context.app.GetAllObjectConfs():
+        for conf in context.app.configurationQuery.GetAllObjectConfs():
             if isinstance(profile.get("toJson"), dict) and conf.id in profile.get("toJson"):
                 # custom list of fields in profile for type 
                 fields[conf.id] = profile.get("toJson")[conf.id]
@@ -1207,7 +1203,7 @@ class APIv1(BaseView):
         if profile.get("parameter"):
             parameter.update(profile.parameter)
         if not "pool_type" in parameter:
-            parameter["pool_type"] = fields.keys()
+            parameter["pool_type"] = list(fields.keys())
         
         # prepare types to descent in tree structure
         temp = profile.get("descent",[])
@@ -1253,7 +1249,7 @@ class APIv1(BaseView):
                 return False
             
             for t in descenttypes:
-                if isinstance(t, basestring):
+                if isinstance(t, str):
                     if item.GetTypeID()==t:
                         if not t in _c_descent[0]:
                             _c_descent[0].append(t)
@@ -1361,7 +1357,7 @@ class APIv1(BaseView):
         To get required assets in a seperate call use `?assets=only` as query parameter. This will
         return the required css and js assets for the specific form only.
         """
-        typename = subset = u""
+        typename = subset = ""
         values = defaults = None
         includeAssets = True
         # look up the new type in custom view definition
@@ -1378,9 +1374,9 @@ class APIv1(BaseView):
             typename = self.GetFormValue("type") or self.GetFormValue("pool_type")
             if not typename:
                 self.AddHeader("X-Result", "false")
-                return {"content": u"Type is empty"}
+                return {"content": "Type is empty"}
 
-        typeconf = self.context.app.GetObjectConf(typename)
+        typeconf = self.context.app.configurationQuery.GetObjectConf(typename)
 
         # set up the form. subset might be the form configuration up to here.
         form, subset = MakeCustomizedViewForm(view=self,
@@ -1534,11 +1530,11 @@ class APIv1(BaseView):
 
         # add actions
         if action == "newItem":
-            values["actions"] = (Conf(id=u"create", method="CreateObj", name=_(u"Submit"), hidden=False, css_class=u"btn btn-primary"),)
-            values["defaultAction"] = Conf(id=u"default", method="StartFormRequest", name=u"Init", hidden=True,  css_class=u"")
+            values["actions"] = (Conf(id="create", method="CreateObj", name=_("Submit"), hidden=False, css_class="btn btn-primary"),)
+            values["defaultAction"] = Conf(id="default", method="StartFormRequest", name="Init", hidden=True,  css_class="")
         elif action == "setItem":
-            values["actions"] = (Conf(id=u"edit", method="UpdateObj", name=_(u"Submit"), hidden=False, css_class=u"btn btn-primary"),)
-            values["defaultAction"] = Conf(id=u"defaultEdit", method="StartObject", name=u"Init", hidden=True, css_class=u"")
+            values["actions"] = (Conf(id="edit", method="UpdateObj", name=_("Submit"), hidden=False, css_class="btn btn-primary"),)
+            values["defaultAction"] = Conf(id="defaultEdit", method="StartObject", name="Init", hidden=True, css_class="")
 
         return values
 
@@ -1568,19 +1564,19 @@ class APIv1(BaseView):
         
         result = {"result": False, "messages": None}
         if test:
-            result["result"] = self.context.WfAllow(action, self.user, transition)
+            result["result"] = self.context.workflow.WfAllow(action, self.user, transition)
             if result["result"]:
-                result["messages"] = [u"Allowed"]
+                result["messages"] = ["Allowed"]
             else:
-                result["messages"] = [u"Not allowed"]
+                result["messages"] = ["Not allowed"]
         else:
             try:
-                result["result"] = self.context.WfAction(action, self.user, transition)
-                result["messages"] = [u"OK"]
+                result["result"] = self.context.workflow.WfAction(action, self.user, transition)
+                result["messages"] = ["OK"]
                 result["state"] = self.state()
             except WorkflowNotAllowed:
                 result["result"] = False
-                result["messages"] = [u"Not allowed"]
+                result["messages"] = ["Not allowed"]
         return result
     
 
@@ -1604,9 +1600,9 @@ class APIv1(BaseView):
         - actions: list of triggering actions for the transition
         
         """
-        state = self.context.GetWfInfo(self.user)
+        state = self.context.workflow.GetWfInfo(self.user)
         if not state:
-            return {"result":False, "messages": [u"No workflow loaded for object"]}
+            return {"result":False, "messages": ["No workflow loaded for object"]}
 
         def _serI(info):
             return {"id":info.id, "name":info.name} 
@@ -1650,9 +1646,9 @@ class APIv1(BaseView):
 
         """
         values = {}
-        values[u"item"] = self.context
-        values[u"view"] = self
-        values[u"request"] = self.request
+        values["item"] = self.context
+        values["view"] = self
+        values["request"] = self.request
         return self.DefaultTemplateRenderer(values, template)
 
 
@@ -1715,9 +1711,9 @@ class APIv1(BaseView):
             return renderers.render(template, values, request=self.request)
         typename = typename or values.get("type")
         if not typename:
-            return u"-no type-"
+            return "-no type-"
         if not hasattr(self, "_c_listing_"+typename):
-            typeconf = self.context.app.GetObjectConf(typename)
+            typeconf = self.context.app.configurationQuery.GetObjectConf(typename)
             tmpl = typeconf.get("listing")
             setattr(self, "_c_listing_"+typename, tmpl)
         else:
@@ -1751,7 +1747,7 @@ def DeserializeItems(view, items, fields, render=()):
             ff = item.configuration.get("toJson", ff)
 
         if ff is None:
-            raise ConfigurationError, "toJson fields are not defined"
+            raise ConfigurationError("toJson fields are not defined")
 
         for field in ff:
             if field in render:
@@ -1799,7 +1795,7 @@ def string_renderer_factory(info):
     def _render(value, system):
         if isinstance(value, dict) and "content" in value:
             value = value["content"]
-        elif not isinstance(value, basestring):
+        elif not isinstance(value, str):
             value = str(value)
         request = system.get('request')
         if request is not None:
