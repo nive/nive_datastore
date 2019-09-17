@@ -672,7 +672,7 @@ class APIv1(BaseView):
         deleted = []
         error = ""
         user = self.User()
-        root = self.context.dataroot
+        root = self.context.root
         for obj in self.context.GetObjsBatch(ids):
             if not self.Allowed("api-delete", obj):
                 error = "Not allowed"
@@ -786,7 +786,7 @@ class APIv1(BaseView):
                     sort = None
 
         parameter = {"pool_unitref": self.context.id}
-        data = self.context.dataroot.search.Select(typename,
+        data = self.context.root.search.Select(typename,
                                               parameter=parameter,
                                               fields=fields,
                                               start=start,
@@ -1064,9 +1064,9 @@ class APIv1(BaseView):
 
         # run the query and handle the result
         if typename:
-            result = self.context.dataroot.search.SearchType(typename, parameter=parameter, fields=fields, operators=operators, **kws)
+            result = self.context.root.search.SearchType(typename, parameter=parameter, fields=fields, operators=operators, **kws)
         else:
-            result = self.context.dataroot.search.Search(parameter=parameter, fields=fields, operators=operators, **kws)
+            result = self.context.root.search.Search(parameter=parameter, fields=fields, operators=operators, **kws)
         values = {"items": result["items"],
                   "start": result["start"]+1,
                   "size": result["count"],
