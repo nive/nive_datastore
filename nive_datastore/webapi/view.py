@@ -1,10 +1,9 @@
-# Copyright 2012-2014 Arndt Droullier, Nive GmbH. All rights reserved.
+# Copyright 2012-2020 Arndt Droullier, Nive GmbH. All rights reserved.
 # Released under GPL3. See license.txt
 
 import inspect
 
 from pyramid.httpexceptions import HTTPForbidden
-from pyramid.security import has_permission
 from pyramid import renderers
 
 from nive.definitions import ViewModuleConf, ViewConf, Conf, ModuleConf
@@ -1264,7 +1263,7 @@ class APIv1(BaseView):
             return False
             
         def itemSubtree(item, lev, includeSubtree=False):
-            if profile.get("secure",True) and not has_permission("api-subtree", item, self.request):
+            if profile.get("secure",True) and not self.request.has_permission("api-subtree", item):
                 return {}
             current = itemValues(item)
             if (includeSubtree or descent(item)) and lev>0 and IContainer.providedBy(item):
