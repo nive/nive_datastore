@@ -110,7 +110,6 @@ database fields used for all collections use `nive.definitions.AppConf.meta`.
 """
 import copy
 
-from nive_datastore.i18n import _
 from nive.definitions import implementer, Interface
 from nive.definitions import AppConf, GroupConf
 from nive.definitions import SystemFlds, UserFlds, WorkflowFlds

@@ -14,13 +14,13 @@ except:
     CHANGES = ''
 
 requires = [
-    'nive>=1.3.1',
-    'nive_userdb>=1.3.1'
+    'nive>=1.3.7',
+    'nive_userdb>=1.3.3'
 ]
 
 setupkw = dict(
       name='nive_datastore',
-      version='1.3.1',
+      version='1.3.3',
       description='Nive Data Storage - High level storage for structured data',
       long_description=README + '\n\n' + CHANGES,
       long_description_content_type="text/markdown",
