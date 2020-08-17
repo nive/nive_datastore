@@ -1749,7 +1749,7 @@ def DeserializeItems(view, items, fields, render=()):
             raise ConfigurationError("toJson fields are not defined")
 
         for field in ff:
-            if field in render:
+            if view is not None and field in render:
                 data[field] = view.RenderField(field, context=item)
             else:
                 data[field] = item.GetFld(field)
