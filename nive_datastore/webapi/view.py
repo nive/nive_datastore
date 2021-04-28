@@ -620,6 +620,7 @@ class APIv1(BaseView):
         strict = False
         recursive = True
         confirmation = None
+        root = self.context.root
 
         # look up the new type in custom view definition
         viewconf = self.GetViewConf()
@@ -637,7 +638,7 @@ class APIv1(BaseView):
             user = self.User()
             obj = self.context
             if not recursive:
-                sub = self.context.search.Select(parameter={"pool_unitref":obj.id}, fields=["id"], max=2)
+                sub = root.search.Select(parameter={"pool_unitref":obj.id}, fields=["id"], max=2)
                 if sub:
                     # not empty -> return
                     return {"result": [], "error": "Not empty"}
@@ -671,7 +672,6 @@ class APIv1(BaseView):
         deleted = []
         error = ""
         user = self.User()
-        root = self.context.root
         for obj in self.context.GetObjsBatch(ids):
             if not self.Allowed("api-delete", obj):
                 error = "Not allowed"
