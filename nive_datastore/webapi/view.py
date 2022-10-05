@@ -1357,7 +1357,7 @@ class APIv1(BaseView):
         return the required css and js assets for the specific form only.
         """
         typename = subset = ""
-        values = defaults = None
+        values = redirectSuccess = defaults = None
         includeAssets = True
         # look up the new type in custom view definition
         viewconf = self.GetViewConf()
@@ -1365,6 +1365,7 @@ class APIv1(BaseView):
             typename = viewconf.settings.get("type")
             subset = viewconf.settings.get("form") or "newItem"
             values = viewconf.settings.get("values")
+            redirectSuccess = viewconf.settings.get("redirectSuccess")
             includeAssets = viewconf.settings.get("includeAssets", includeAssets)
         else:
             subset = self.GetFormValue("subset") or "newItem"
@@ -1391,7 +1392,7 @@ class APIv1(BaseView):
             return {"content": form.HTMLHead(ignore=[a[0] for a in self.configuration.assets])}
 
         # process and render the form.
-        result, data, action = form.Process(pool_type=typename, defaults=defaults, values=values)
+        result, data, action = form.Process(pool_type=typename, defaults=defaults, values=values, redirectSuccess=redirectSuccess)
         if IObject.providedBy(result):
             result = result.id
 
@@ -1476,13 +1477,14 @@ class APIv1(BaseView):
         To get required assets in a seperate call use `?assets=only` as query parameter. This will
         return the required css and js assets for the specific form only.
         """
-        values = None
+        values = redirectSuccess = None
         includeAssets = True
         # look up the new type in custom view definition
         viewconf = self.GetViewConf()
         if viewconf and viewconf.get("settings"):
             subset = viewconf.settings.get("form") or "setItem"
             values = viewconf.settings.get("values")
+            redirectSuccess = viewconf.settings.get("redirectSuccess")
             includeAssets = viewconf.settings.get("includeAssets", includeAssets)
         else:
             subset = self.GetFormValue("subset") or "setItem"
@@ -1504,7 +1506,7 @@ class APIv1(BaseView):
             return {"content": form.HTMLHead(ignore=[a[0] for a in self.configuration.assets])}
 
         # process and render the form.
-        result, data, action = form.Process(values=values)
+        result, data, action = form.Process(values=values, redirectSuccess=redirectSuccess)
         if IObject.providedBy(result):
             result = result.id
 
